@@ -1,4 +1,5 @@
 import argparse
+from io import BytesIO
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from config import InferenceConfig
@@ -7,11 +8,10 @@ from inference import LlamaInterface, Qwen2VLInterface, InternVLInterface
 def main(cli:bool,engine):
     
     ### test image
-    imga_path = '/root/Documents/project/qwenvl_infer/demo.jpeg'
+    image_path = '/root/Documents/project/qwenvl_infer/demo.jpeg'
     from PIL import Image
     # load image
-    image = Image.open(imga_path)
-    # image = None
+    image = Image.open(image_path)
     flag = 0
     if cli:
         while True:
@@ -43,7 +43,13 @@ def main(cli:bool,engine):
         msg = request.get_json(force=True)['message']
         if len(msg) == 0:
             return jsonify({"code": 404})
-        pool.submit(engine.predict,msg)
+        # if image is in request, use it
+        if 'image' in request.files:
+            image = request.files['image']
+            image = Image.open(BytesIO(image.read()))
+            pool.submit(engine.predict,msg,image)
+        else:
+            pool.submit(engine.predict,msg,None)
         return jsonify({"code": 200})
 
     @app.route("/api/getMsg", methods=["GET"])

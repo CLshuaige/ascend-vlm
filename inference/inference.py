@@ -168,7 +168,7 @@ class LlamaInterface:
 class Qwen2VLInterface:
     def __init__(self,config:InferenceConfig) -> None:
 
-        self.monitor = NPUMonitor(interval=0.5, log_file='./logs/npu_memory.log')
+        self.monitor = NPUMonitor(interval=0.5, log_file='/root/Documents/project/ascend-vlm/logs/npu_memory.log')
         self.monitor.start()
 
         self.max_length = config.max_length
@@ -319,6 +319,8 @@ class Qwen2VLInterface:
             if first_token:
                 time_first_token = time.time()
                 logging.info(f"first token time: {time_first_token - start_total}")
+                with self.lock:
+                    self.state['first_token'] = time_first_token - start_total
                 first_token = False
             text_out = self.tokenizer.decode(ids_list)
             # stop_word = is_stop_word_or_prefix(text_out,self.stop_words)
@@ -334,11 +336,13 @@ class Qwen2VLInterface:
         if self.is_token_by_token:
             print('\n',end="",flush=True)
         self.last_output = self.tokenizer.decode(ids_list)
-        with self.lock:
-            self.state['message'],self.state['isEnd'] = self.last_output,True
-        self.chat_history += self.last_output
         end_total = time.time()
         logging.info(f"total time: {end_total - start_total}, token/second: {len(ids_list)/(end_total - time_first_token)}")
+        with self.lock:
+            self.state['message'],self.state['isEnd'] = self.last_output,True
+            self.state['total_time'] = end_total - start_total
+            self.state['token_per_second'] = len(ids_list)/(end_total - time_first_token)
+        self.chat_history += self.last_output
         
         if self.is_token_by_token:
             return ''
