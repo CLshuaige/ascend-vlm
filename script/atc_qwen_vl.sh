@@ -70,10 +70,19 @@ atc --framework=5 \
 
 
 atc --framework=5 \
-    --model="visual.onnx" \
+    --model="visual_252_448.onnx" \
+    --output="/root/Documents/model_dir/Ascend_llms/Qwen2VL/int8_1024_dy/visual_int8_420_238" \
+    --input_format=ND \
+    --input_shape="pixel_values:1,576,1176" \
+    --log=debug \
+    --soc_version=Ascend310B1 \
+    --precision_mode=must_keep_origin_dtype
+
+atc --framework=5 \
+    --model="visual_252_448.onnx" \
     --output="/root/Documents/model_dir/Ascend_llms/Qwen2VL/fp16_1024_1/visual" \
     --input_format=ND \
-    --input_shape="pixel_values:1,900,1176" \
+    --input_shape="pixel_values:1,576,1176" \
     --log=debug \
     --soc_version=Ascend310B1 \
     --precision_mode=must_keep_origin_dtype

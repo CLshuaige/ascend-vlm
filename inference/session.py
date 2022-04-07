@@ -11,7 +11,14 @@ from utils_pact import pact
 from tqdm import tqdm
 
 import logging
-import log_config
+#import log_config
+
+# save to log file
+# write log infos  to file only
+# logging.basicConfig(filename='session.log', level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+# 					force=True)
+# logging.info('Start logging')
+
 
 class Session:
 	def __init__(self,config:InferenceConfig) -> None:
@@ -125,8 +132,7 @@ class AclQwenVLSession(Session):
 		self.context = initResource(config.device)
 		self.acl_mode = config.acl_mode
 		# input: attention_mask:1,1,1,1025;position_ids:3,1,1;past_key_values:28,2,1,2,1024,128;input_embeds:1,1,1536
-		if config.visual_path is not None:
-			self.vision_model = ACLModel(config.vision_model,context=self.context,mode=config.acl_mode)
+		self.vision_model = ACLModel(config.vision_model,context=self.context,mode=config.acl_mode)
 		self.llm_model = ACLModel(config.llm_model,context=self.context,mode=self.acl_mode)
 		# input: pixel_values:1,900,1176
 		self.embedding_model = ACLModel(config.embedding_model,context=self.context,mode=config.acl_mode)
@@ -147,11 +153,14 @@ class AclQwenVLSession(Session):
 		if pixel_values is not None:
 
 			pixel_values = np.expand_dims(pixel_values,axis=0)
+			st = time.time()
 			image_embeds = self.vision_model.inference([pixel_values])[0]
+			dt = time.time()
+			print(f"vision inference: {dt-st}s")
 			image_embeds = image_embeds.reshape(1,image_embeds.shape[0],-1).astype(np.float16)
 			image_start_pos = np.where(image_mask==True)[1][0]
 			image_len = np.sum(image_mask)
-			self.vision_model.unload()
+			#self.vision_model.unload()
 		else:
 			image_start_pos = -1
 			image_len = 0
@@ -226,7 +235,10 @@ class AclQwenVLPACTSession(Session):
 		use_pact = (pixel_values is not None) # 是否需要在改RUN中使用pact reduction
 		if pixel_values is not None:
 			pixel_values = np.expand_dims(pixel_values,axis=0)
+			st = time.time()
 			image_embeds = self.vision_model.inference([pixel_values])[0]
+			dt = time.time()
+			logging.info(f"image inference: {dt-st}")
 			# print(f"image_embeds.shape: {image_embeds.shape}")
 			# print(f"image_embeds: {image_embeds}")
 			# exit()
@@ -248,6 +260,7 @@ class AclQwenVLPACTSession(Session):
 			r = min(seq_len,r)
 			self.input_ids[:,:r-l] = input_ids[:,l:r]
 			cache,mask,pos_ids = self.kvCache[0].getInputsForVLM(self.max_len,image_mask)
+			#logging.info(f"input part1: mask: {mask}, pos_ids: {pos_ids}")
 			if l < image_start_pos:
 				self.input_embeds[:,:r-l,:] = self.embedding_model.inference([self.input_ids])[0]
 			elif l >= image_start_pos + image_len:
@@ -297,6 +310,7 @@ class AclQwenVLPACTSession(Session):
 		while l < seq_len:
 			r = min(seq_len,r)
 			cache,mask,pos_ids = self.kvCache[1].getInputsForVLM(self.max_len,image_mask)
+			#logging.info(f"input part2: mask: {mask}, pos_ids: {pos_ids}")
 
 			if use_pact:
 				mask[..., :l+1] = self.weights[:, :l+1].view(1, 1, 1, -1).cpu().numpy().astype(np.float16)

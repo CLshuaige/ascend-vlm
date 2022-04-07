@@ -20,7 +20,8 @@ class KVCache:
         self.num_kv_group = cfg.num_kv_group
 
         # visual
-        self.image_grid = cfg.image_grid
+        self.image_grid_h = cfg.image_grid_h
+        self.image_grid_w = cfg.image_grid_w
         if cfg.dtype == "float16":
             self.dtype=np.float16
         elif cfg.dtype=="float32":
@@ -81,8 +82,8 @@ class KVCache:
             pos_id = np.arange(image_start_pos, image_start_pos+seq_len, dtype=np.int64).reshape(1, -1)
             pos_id = np.repeat(pos_id[np.newaxis], 3, axis=0)
 
-            pos_id[1, 0, 0] = (self.input_pos-image_start_pos) // self.image_grid
-            pos_id[2, 0, 0] = (self.input_pos-image_start_pos) % self.image_grid
+            pos_id[1, 0, 0] = (self.input_pos-image_start_pos) // self.image_grid_w
+            pos_id[2, 0, 0] = (self.input_pos-image_start_pos) % self.image_grid_w
 
         return cache, mask, pos_id
     

@@ -1,5 +1,4 @@
 export DEVICE="cpu"
-
 export PACT=False
 export Layer1_4=False
 export Layer5_28=False
@@ -16,9 +15,9 @@ export export_visual=True
 
 #int8
 python ../export_llama/export_qwen2_vl.py \
-	--model /home/chenl/weights/hf-models/Qwen2-VL-2B-Instruct \
-	--output /home/chenl/weights/export-models/Qwen2-VL-2B-Instruct/onnx_model/int8_1024/visual/llm.onnx \
-	--quant /home/chenl/project/ascend/ascend-vlm/export_llama/config/w8x8.py
+	--model /root/Documents/model_dir/Qwen2-VL-2B-Instruct \
+	--output /root/Documents/model_dir/Qwen2-vl-onnx/visual_252_448/llm.onnx \
+	--quant /root/Documents/project/ascend-vlm/export_llama/config/w8x8.py
 # PACT 1-4
 # python ../export_llama/export_qwen2_vl.py \
 # 	--model /home/chenl/weights/hf-models/Qwen2-VL-2B-Instruct \

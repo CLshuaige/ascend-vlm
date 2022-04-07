@@ -46,9 +46,11 @@ class InferenceConfig:
 
     ## visual
     visual_path:str=""
-    image_size:int=420
+    resized_width:int=448
+    resized_height:int=252
     patch_size:int=14
-    image_grid:int=image_size//patch_size//2
+    image_grid_h:int=resized_height//patch_size//2
+    image_grid_w:int=resized_width//patch_size//2
     image_pad_id = 151655 #"<|image_pad|>"
 
     pact:bool = False # 是否使用Pact量化

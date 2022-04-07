@@ -16,7 +16,7 @@ import re
 from io import BytesIO
 import time
 import logging
-import log_config
+#import log_config
 
 from npu_monitor import NPUMonitor
 
@@ -184,7 +184,7 @@ class Qwen2VLInterface:
         self.state:dict[str,Any] = {"code":200,"isEnd":False,"message":""}        
         self.first=True
 
-        self.resized_height, self.resized_width = config.image_size, config.image_size
+        self.resized_height, self.resized_width = config.resized_height, config.resized_width
         ## TODO
         # self.stop_mp = {"[|Human|]":6,"[|AI|]":5,"<|assistant|>":6,"<|user|>":5,"<|system|>":5}
         # self.stop_words = ["<|user|>","<|assistant|>","<|system|>","[|AI|]","[|Human|]"]
@@ -276,6 +276,8 @@ class Qwen2VLInterface:
         if len(self.last_output) == 0:
             return 
         self.generate_cache('<|im_end|>\n')
+        image_mask = np.array([[False,False]])
+        self.image_mask = np.concatenate((self.image_mask, image_mask), axis=1)
         self.last_output = ""
     
     def predict(self, text, image=None):
@@ -336,6 +338,7 @@ class Qwen2VLInterface:
                 print(self.tokenizer.decode(ids_list[-1]),end="",flush=True)
         if self.is_token_by_token:
             print('\n',end="",flush=True)
+        self.image_mask = np.concatenate((self.image_mask, [[False*len(ids_list)]]), axis=1)
         self.last_output = self.tokenizer.decode(ids_list)
         end_total = time.time()
         logging.info(f"total time: {end_total - start_total}, token/second: {len(ids_list)/(end_total - time_first_token)}")

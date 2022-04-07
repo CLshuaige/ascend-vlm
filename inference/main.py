@@ -5,6 +5,8 @@ from concurrent.futures import ThreadPoolExecutor
 from config import InferenceConfig
 from inference import LlamaInterface, Qwen2VLInterface, InternVLInterface
 
+import log_config
+
 def main(cli:bool,engine):
     
     ### test image
