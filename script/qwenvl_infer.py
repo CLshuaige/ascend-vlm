@@ -20,7 +20,7 @@ device='cuda:1'
 # Command line arguments
 model_path = sys.argv[1]
 #onnx_path = sys.argv[2]
-PACT = True
+PACT = False
 datatype = np.float16
 sim = True
 # paths = {
@@ -44,16 +44,16 @@ num_layers = model_config.num_hidden_layers
 session_options = ort.SessionOptions()
 session_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
 
-onnx_names = ["llm.onnx", "embedder.onnx", "visual.onnx"]
+onnx_names = ["visual.onnx"]
 if PACT:
     onnx_names = ["llm1.onnx", "llm2.onnx", "embedder.onnx", "visual.onnx"]
 onnx_names = onnx_names[:]
 print(onnx_names)
 #model_paths = {m: os.path.join(onnx_path, m) for m in onnx_names}
 model_paths = {
-    "llm.onnx": "/home/chenl/weights/export-models/Qwen2-VL-2B-Instruct/onnx_model/int8_1024/llm/llm.onnx",
-    "embedder.onnx": "/home/chenl/weights/export-models/Qwen2-VL-2B-Instruct/onnx_model/fp16_1024_split/embedder/embedder.onnx",
-    "visual.onnx": "/home/chenl/weights/export-models/Qwen2-VL-2B-Instruct/onnx_model/fp16_1024_split/visual/visual.onnx"
+    # "llm.onnx": "/home/chenl/weights/export-models/Qwen2-VL-2B-Instruct/onnx_model/int8_1024/llm/llm.onnx",
+    # "embedder.onnx": "/home/chenl/weights/export-models/Qwen2-VL-2B-Instruct/onnx_model/fp16_1024_split/embedder/embedder.onnx",
+    "visual.onnx": "/root/Documents/model_dir/Qwen2-vl-onnx/change_node_output/visual_f16_int8.onnx"
 }
 if PACT:
     model_paths = {
@@ -497,7 +497,7 @@ visual = True
 len_image_embeds = 0
 if visual:
     # Process image
-    image_url = '/home/chenl/project/ascend/llm-export/script/demo.jpeg'
+    image_url = '/root/Documents/project/qwenvl_infer/demo.jpeg'
 
     w, h = 420, 420
     if w:
@@ -515,6 +515,9 @@ if visual:
         dict(zip(inputs['visual.onnx'],
             [pixel_values]))
     )[0]
+    print(f"visual_embeds shape: {visual_embeds.shape}")
+    print(f"visual_embeds: {visual_embeds}")
+    exit()
     visual_embeds = visual_embeds[np.newaxis, :, :]
     len_image_embeds = visual_embeds.shape[1]
 

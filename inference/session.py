@@ -227,6 +227,9 @@ class AclQwenVLPACTSession(Session):
 		if pixel_values is not None:
 			pixel_values = np.expand_dims(pixel_values,axis=0)
 			image_embeds = self.vision_model.inference([pixel_values])[0]
+			# print(f"image_embeds.shape: {image_embeds.shape}")
+			# print(f"image_embeds: {image_embeds}")
+			# exit()
 			image_embeds = image_embeds.reshape(1,image_embeds.shape[0],-1).astype(np.float16)
 			image_start_pos = np.where(image_mask==True)[1][0]
 			image_len = np.sum(image_mask)
