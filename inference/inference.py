@@ -353,6 +353,7 @@ class Qwen2VLInterface:
         self.first = True
         self.last_output = ""
         self.session.reset()
+        self.image_mask = []
         #self.generate_cache(self.apply_chat_template([{"role":"system","content":self.system_prompt}])[0])
         
     def getState(self):
