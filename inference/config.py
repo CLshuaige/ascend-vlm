@@ -15,6 +15,8 @@ class InferenceConfig:
     session_type:str="acl" # onnx或者acl
     acl_mode="rc" #rc模式下host和device是同一块内存，可以对执行流程进行优化
     device:int=0
+    device_id:int=0 
+    infer_mode:str="static" # mode args for session.infer
     # prompt:List[Dict[str,str]] = field(default_factory=list)
     prompt:List[Dict[str,str]] = field(default_factory=lambda: [
         {"role":"user","content":"Hey there I am a human that would like to have a conversation with you."},

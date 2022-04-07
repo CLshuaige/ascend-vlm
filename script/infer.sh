@@ -1,3 +1,4 @@
+free -h && sudo sysctl -w vm.drop_caches=3 && sudo sync && echo 3 | sudo tee /proc/sys/vm/drop_caches && free -h
 KVSIZE=1024
 # python ./inference/main.py \
 #     --model /root/Documents/model_dir/Ascend_llms/TinyLlama-1.1B-Chat-v1.0/tiny-llama-seq-1-key-256-int8.om \

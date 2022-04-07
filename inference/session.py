@@ -5,6 +5,7 @@ from typing import List, Optional
 import time
 import sys
 from engine import ACLModel,initResource
+from ais_bench.infer.interface import InferSession
 
 from utils_pact import pact
 
@@ -132,10 +133,13 @@ class AclQwenVLSession(Session):
 		self.context = initResource(config.device)
 		self.acl_mode = config.acl_mode
 		# input: attention_mask:1,1,1,1025;position_ids:3,1,1;past_key_values:28,2,1,2,1024,128;input_embeds:1,1,1536
-		self.vision_model = ACLModel(config.vision_model,context=self.context,mode=config.acl_mode)
-		self.llm_model = ACLModel(config.llm_model,context=self.context,mode=self.acl_mode)
+		#self.vision_model = ACLModel(config.vision_model,context=self.context,mode=config.acl_mode)
+		self.vision_model = InferSession(config.device_id, config.vision_model)
+		#self.llm_model = ACLModel(config.llm_model,context=self.context,mode=self.acl_mode)
+		self.llm_model = InferSession(config.device_id, config.llm_model)
 		# input: pixel_values:1,900,1176
-		self.embedding_model = ACLModel(config.embedding_model,context=self.context,mode=config.acl_mode)
+		#self.embedding_model = ACLModel(config.embedding_model,context=self.context,mode=config.acl_mode)
+		self.embedding_model = InferSession(config.device_id, config.embedding_model)
 		# input: input_ids:1,1
 		self.image_pad_id = config.image_pad_id
 		self.format = config.format
@@ -154,7 +158,7 @@ class AclQwenVLSession(Session):
 
 			pixel_values = np.expand_dims(pixel_values,axis=0)
 			st = time.time()
-			image_embeds = self.vision_model.inference([pixel_values])[0]
+			image_embeds = self.vision_model.infer([pixel_values])[0]
 			dt = time.time()
 			print(f"vision inference: {dt-st}s")
 			image_embeds = image_embeds.reshape(1,image_embeds.shape[0],-1).astype(np.float16)
@@ -173,13 +177,13 @@ class AclQwenVLSession(Session):
 			self.input_ids[:,:r-l] = input_ids[:,l:r]
 			cache,mask,pos_ids = self.kvCache.getInputsForVLM(self.max_len,image_mask)
 			if l < image_start_pos:
-				self.input_embeds[:,:r-l,:] = self.embedding_model.inference([self.input_ids])[0]
+				self.input_embeds[:,:r-l,:] = self.embedding_model.infer([self.input_ids])[0]
 			elif l >= image_start_pos + image_len:
-				self.input_embeds[:,:r-l,:] = self.embedding_model.inference([self.input_ids])[0]
+				self.input_embeds[:,:r-l,:] = self.embedding_model.infer([self.input_ids])[0]
 			else:
 				self.input_embeds[:,:r-l,:] = image_embeds[:,l-image_start_pos:r-image_start_pos,:]
 				
-			result:List[np.ndarray] = self.llm_model.inference([mask,pos_ids,cache,self.input_embeds])
+			result:List[np.ndarray] = self.llm_model.infer([mask,pos_ids,cache,self.input_embeds])
 			if pbar is not None:
 				pbar.update(r-l)
 			if self.format == 'huggingface-tensor':
@@ -196,11 +200,15 @@ class AclQwenVLPACTSession(Session):
 		self.context = initResource(config.device)
 		self.acl_mode = config.acl_mode
 
-		self.vision_model = ACLModel(config.vision_model,context=self.context,mode=config.acl_mode)
-		self.embedding_model = ACLModel(config.embedding_model,context=self.context,mode=config.acl_mode)
+		#self.vision_model = ACLModel(config.vision_model,context=self.context,mode=config.acl_mode)
+		#self.embedding_model = ACLModel(config.embedding_model,context=self.context,mode=config.acl_mode)
+		self.vision_model = InferSession(config.device_id, config.vision_model)
+		self.embedding_model = InferSession(config.device_id, config.embedding_model)
 		
-		llm_model_1 = ACLModel(config.llm_model.replace('llm.om','llm_1_4.om'),context=self.context,mode=self.acl_mode)
-		llm_model_2 = ACLModel(config.llm_model.replace('llm.om','llm_5_28.om'),context=self.context,mode=self.acl_mode)
+		#llm_model_1 = ACLModel(config.llm_model.replace('llm.om','llm_1_4.om'),context=self.context,mode=self.acl_mode)
+		#llm_model_2 = ACLModel(config.llm_model.replace('llm.om','llm_5_28.om'),context=self.context,mode=self.acl_mode)
+		llm_model_1 = InferSession(config.device_id, config.llm_model.replace('llm.om','llm_1_4.om'))
+		llm_model_2 = InferSession(config.device_id, config.llm_model.replace('llm.om','llm_5_28.om'))
 		self.llm_model = [llm_model_1, llm_model_2]
 
 		self.image_pad_id = config.image_pad_id
@@ -236,7 +244,7 @@ class AclQwenVLPACTSession(Session):
 		if pixel_values is not None:
 			pixel_values = np.expand_dims(pixel_values,axis=0)
 			st = time.time()
-			image_embeds = self.vision_model.inference([pixel_values])[0]
+			image_embeds = self.vision_model.infer([pixel_values])[0]
 			dt = time.time()
 			logging.info(f"image inference: {dt-st}")
 			# print(f"image_embeds.shape: {image_embeds.shape}")
@@ -262,14 +270,14 @@ class AclQwenVLPACTSession(Session):
 			cache,mask,pos_ids = self.kvCache[0].getInputsForVLM(self.max_len,image_mask)
 			#logging.info(f"input part1: mask: {mask}, pos_ids: {pos_ids}")
 			if l < image_start_pos:
-				self.input_embeds[:,:r-l,:] = self.embedding_model.inference([self.input_ids])[0]
+				self.input_embeds[:,:r-l,:] = self.embedding_model.infer([self.input_ids])[0]
 			elif l >= image_start_pos + image_len:
-				self.input_embeds[:,:r-l,:] = self.embedding_model.inference([self.input_ids])[0]
+				self.input_embeds[:,:r-l,:] = self.embedding_model.infer([self.input_ids])[0]
 			else:
 				self.input_embeds[:,:r-l,:] = image_embeds[:,l-image_start_pos:r-image_start_pos,:]
 			
 			# hidden_states, new_kvcache, query_states_before_rope, key_states_before_rope
-			hidden_states, new_kvcache, query_states_before_rope, key_states_before_rope = self.llm_model[0].inference([mask,pos_ids,cache,self.input_embeds])
+			hidden_states, new_kvcache, query_states_before_rope, key_states_before_rope = self.llm_model[0].infer([mask,pos_ids,cache,self.input_embeds])
 
 			if use_pact:
 				key_states = new_kvcache[3, 0]
@@ -324,7 +332,7 @@ class AclQwenVLPACTSession(Session):
 				
 			# print(f"pos_ids: {pos_ids[0]}")
 			# print(f"KVcache[1], input_pos: {self.kvCache[1].input_pos}, p: {self.kvCache[1].p}, kv_size: {self.kvCache[1].kv_size}")
-			result_2:List[np.ndarray] = self.llm_model[1].inference([mask,pos_ids,cache,self.hidden_states])
+			result_2:List[np.ndarray] = self.llm_model[1].infer([mask,pos_ids,cache,self.hidden_states])
 
 			if pbar is not None:
 				pbar.update(r-l)
