@@ -6,7 +6,8 @@ import time
 import sys
 from engine import ACLModel,initResource
 
-from utils import preprocess_image
+from tqdm import tqdm
+
 class Session:
 	def __init__(self,config:InferenceConfig) -> None:
 		self.kvCache = KVCache.create(config)
@@ -99,7 +100,6 @@ class AclQwenVLSession(Session):
 		self.context = initResource(config.device)
 		self.acl_mode = config.acl_mode
 		# input: attention_mask:1,1,1,1025;position_ids:3,1,1;past_key_values:28,2,1,2,1024,128;input_embeds:1,1,1536
-		print(config.visual_path)
 		if config.visual_path is not None:
 			self.vision_model = ACLModel(config.vision_model,context=self.context,mode=config.acl_mode)
 		self.llm_model = ACLModel(config.llm_model,context=self.context,mode=self.acl_mode)
@@ -131,6 +131,9 @@ class AclQwenVLSession(Session):
 			image_start_pos = -1
 			image_len = 0
 
+		pbar = None
+		if seq_len > 1:
+			pbar = tqdm(total=seq_len,desc='Inference')
 		while l < seq_len:
 			r = min(seq_len,r)
 			self.input_ids[:,:r-l] = input_ids[:,l:r]
@@ -143,8 +146,12 @@ class AclQwenVLSession(Session):
 				self.input_embeds[:,:r-l,:] = image_embeds[:,l-image_start_pos:r-image_start_pos,:]
 				
 			result:List[np.ndarray] = self.llm_model.inference([mask,pos_ids,cache,self.input_embeds])
+			if pbar is not None:
+				pbar.update(r-l)
 			if self.format == 'huggingface-tensor':
 				self.kvCache.update(r-l, result[1])
 			l , r = l+self.max_len , r + self.max_len
+		if pbar is not None:
+			pbar.close()
 		return result
 

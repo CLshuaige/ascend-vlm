@@ -47,11 +47,22 @@ atc --framework=5 \
     --soc_version=Ascend310B1 \
     --precision_mode=must_keep_origin_dtype
 
+# 1024
 atc --framework=5 \
     --model="llm.onnx" \
     --output="/root/Documents/model_dir/Ascend_llms/Qwen2VL/int8_1024_dy/llm" \
     --input_format=ND \
     --input_shape="attention_mask:1,1,1,1025;position_ids:3,1,1;past_key_values:28,2,1,2,1024,128;input_embeds:1,1,1536" \
+    --log=debug \
+    --soc_version=Ascend310B1 \
+    --precision_mode=must_keep_origin_dtype
+
+# 256
+atc --framework=5 \
+    --model="llm.onnx" \
+    --output="/root/Documents/model_dir/Ascend_llms/Qwen2VL/int8_1024_dy/llm_256" \
+    --input_format=ND \
+    --input_shape="attention_mask:1,1,1,257;position_ids:3,1,1;past_key_values:28,2,1,2,256,128;input_embeds:1,1,1536" \
     --log=debug \
     --soc_version=Ascend310B1 \
     --precision_mode=must_keep_origin_dtype

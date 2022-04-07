@@ -160,7 +160,7 @@ class Qwen2VLInterface:
         self.max_length = config.max_length
         from transformers import AutoTokenizer
         self.tokenizer=AutoTokenizer.from_pretrained(config.tokenizer)
-        self.processor = AutoProcessor.from_pretrained(config.hf_model_dir)
+        self.processor = AutoProcessor.from_pretrained(config.hf_model_dir, use_fast=True)
         self.sampling_method=config.sampling_method
         self.sampling_value = config.sampling_value
         self.temperature=config.temperature
@@ -183,7 +183,7 @@ class Qwen2VLInterface:
 
 
 
-        self.processor = AutoProcessor.from_pretrained(config.hf_model_dir)
+        self.processor = AutoProcessor.from_pretrained(config.hf_model_dir, use_fast=True)
 
         print("init success")
 
@@ -265,7 +265,6 @@ class Qwen2VLInterface:
         if image is not None:
             pixel_values = inputs["pixel_values"]
             pixel_values = np.asarray(pixel_values,dtype=np.float16)
-            print(f"pixel_values shape: {pixel_values.shape}")
         else:
             pixel_values = None
         input_ids = np.asarray(input_ids,dtype=np.int64).reshape(1,-1)
