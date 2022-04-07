@@ -1354,7 +1354,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
-def pact(hidden_states, query_states_before_rope, key_states_before_rope, key_states, query_states, image_mask, real_position_ids, config_path):
+def pact(hidden_states, query_states_before_rope, key_states_before_rope, key_states, query_states, image_mask, real_position_ids, config_path, model_type):
     with open(config_path, 'r', encoding='utf-8') as f:
         pact_config = json.load(f)
     from types import SimpleNamespace
@@ -1374,7 +1374,10 @@ def pact(hidden_states, query_states_before_rope, key_states_before_rope, key_st
     if not isinstance(key_states_before_rope, torch.Tensor):
         key_states_before_rope = torch.tensor(key_states_before_rope, dtype=torch.float).transpose(1, 2)
     if not isinstance(key_states, torch.Tensor):
-        key_states = torch.tensor(key_states, dtype=torch.float).permute(0,2,1,3).reshape(1,-1,256)
+        if model_type == 'internvl-pact':
+            key_states = torch.tensor(key_states, dtype=torch.float).permute(0,2,1,3).reshape(1,-1,1024)
+        else:
+            key_states = torch.tensor(key_states, dtype=torch.float).permute(0,2,1,3).reshape(1,-1,256)
 
     if not isinstance(real_position_ids, torch.Tensor):
         real_position_ids = torch.tensor(real_position_ids, dtype=torch.int64)
@@ -1433,6 +1436,9 @@ def pact(hidden_states, query_states_before_rope, key_states_before_rope, key_st
                 num_key_value_heads = 2
                 head_dim = 128
                 num_heads = 12
+                if model_type == 'internvl-pact':
+                    num_key_value_heads = 8
+                    num_heads = 16
                 num_key_value_groups = num_heads // num_key_value_heads
                 current_k_image = current_k_image.view(bsz, -1, num_key_value_heads, head_dim).transpose(1, 2)
                 current_k_image = repeat_kv(current_k_image, num_key_value_groups)
@@ -1462,7 +1468,7 @@ def pact(hidden_states, query_states_before_rope, key_states_before_rope, key_st
 
                     scores=torch.softmax(scores,dim=-1,dtype=torch.float32).mean(1)
                     scores = torch.nan_to_num(scores, nan=0.0)
-                    
+
                     if pact_config.use_attention_in_token_pruning :
                         scores=scores.mean(-2)
                     else :    
@@ -1520,7 +1526,10 @@ def pact(hidden_states, query_states_before_rope, key_states_before_rope, key_st
             
             if pact_config.use_DBDPC:
                 #real_position_ids 3,1,seqlen
-                real_position_ids_after_mask_image=real_position_ids.permute(2,1,0)[first_mask_global]  #N,1,3
+                if model_type == 'internvl-pact':
+                    real_position_ids_after_mask_image=real_position_ids.permute(1,0)[first_mask_global]  #N,1
+                else:
+                    real_position_ids_after_mask_image=real_position_ids.permute(2,1,0)[first_mask_global]  #N,1,3
                 if not pact_config.include_pruned_in_mean :
                     merged,second_mask,weights,position_ids_after_reduction=token_reduction(hidden_states[:,first_mask_global].squeeze(0),vector_to_use_in_distance_clustering[:,first_mask_global].squeeze(0),position_ids=real_position_ids_after_mask_image,reduction=None,cutoff=pact_config.cutoff,pact_config=pact_config)
                 else :
@@ -1617,7 +1626,10 @@ def pact(hidden_states, query_states_before_rope, key_states_before_rope, key_st
             
             #position_ids=position_ids[:,:,mask_final]
             hidden_states=hidden_states[:,mask_final]
-            real_position_ids=real_position_ids[:,:,mask_final]
+            if model_type == 'internvl-pact':
+                real_position_ids=real_position_ids[:,mask_final]
+            else:
+                real_position_ids=real_position_ids[:,:,mask_final]
             #cache_position=cache_position[mask_final.squeeze()]
             #position_embeddings=(position_embeddings[0][:,:,mask_final],position_embeddings[1][:,:,mask_final])
             weights = weights[:,mask_final]
@@ -1635,8 +1647,10 @@ def pact(hidden_states, query_states_before_rope, key_states_before_rope, key_st
                 weights=weights
 
             weights_forward=weights
-
-            seq_len = real_position_ids.shape[2]
+            if model_type == 'internvl-pact':
+                seq_len = real_position_ids.shape[1]
+            else:
+                seq_len = real_position_ids.shape[2]
             weights_forward=weights_forward.squeeze().unsqueeze(0).repeat(seq_len,1)
             
             weights_forward=weights_forward.to(hidden_states.dtype).unsqueeze(0).unsqueeze(0)
@@ -1651,8 +1665,10 @@ def pact(hidden_states, query_states_before_rope, key_states_before_rope, key_st
             # else :
             #     self.weights=torch.cat((self.weights,torch.zeros(self.weights.size(0), hidden_states.shape[1], device=self.weights.device)),dim=-1)
             #     weights_forward=self.weights
-            
-            seq_len = real_position_ids.shape[2]
+            if model_type == 'internvl-pact':
+                seq_len = real_position_ids.shape[1]
+            else:
+                seq_len = real_position_ids.shape[2]
             weights_forward=weights_forward.squeeze().unsqueeze(0).repeat(seq_len,1)
             weights_forward=weights_forward.to(hidden_states.dtype).unsqueeze(0).unsqueeze(0)
 

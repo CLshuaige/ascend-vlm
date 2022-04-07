@@ -184,7 +184,7 @@ class Qwen2VLInterface:
         self.state:dict[str,Any] = {"code":200,"isEnd":False,"message":""}        
         self.first=True
 
-        self.resized_height, self.resized_width = config.image_size, config.image_size
+        self.resized_height, self.resized_width = 252, 448
         ## TODO
         # self.stop_mp = {"[|Human|]":6,"[|AI|]":5,"<|assistant|>":6,"<|user|>":5,"<|system|>":5}
         # self.stop_words = ["<|user|>","<|assistant|>","<|system|>","[|AI|]","[|Human|]"]
@@ -553,14 +553,14 @@ class InternVLInterface:
             pixel_values = None
             input_ids = self.sample_logits(logits[0][-1:], self.sampling_method, self.sampling_value, self.temperature)
             input_ids = input_ids.reshape(1, -1)
+            if first_token:
+                time_first_token = time.time()
+                logging.info(f"first token time: {time_first_token - start_total}")
+                first_token = False            
             if input_ids[0] == 92542:
                 #self.session.rollback(1) 
                 break
             ids_list.append(input_ids[0].item())
-            if first_token:
-                time_first_token = time.time()
-                logging.info(f"first token time: {time_first_token - start_total}")
-                first_token = False
             text_out = self.tokenizer.decode(ids_list)
             # stop_word = is_stop_word_or_prefix(text_out,self.stop_words)
             # if stop_word != "":
@@ -631,7 +631,7 @@ class InternVLInterface:
                     text += f'<|im_start|>system\n{message["content"]}<|im_end|>\n'
                 else:
                     text += f'{message["content"]}\n'
-        elif self.model_type == "internvl":
+        elif self.model_type == "internvl" or self.model_type == "internvl-pact":
             for message in messages:
                 if message["role"] == "user":
                     text_content, image = message["content"]

@@ -7,7 +7,7 @@ from inference import LlamaInterface, Qwen2VLInterface, InternVLInterface
 def main(cli:bool,engine):
     
     ### test image
-    imga_path = '/root/Documents/project/qwenvl_infer/image1.jpg'
+    imga_path = '/root/Documents/project/qwenvl_infer/demo.jpeg'
     from PIL import Image
     # load image
     image = Image.open(imga_path)
@@ -149,7 +149,7 @@ if __name__ == '__main__':
 
     if args.model_type == "qwen2vl-2b" or args.model_type == "qwen2vl-pact":
         engine = Qwen2VLInterface(cfg)
-    elif args.model_type == "internvl":
+    elif args.model_type == "internvl" or args.model_type == "internvl-pact":
         engine = InternVLInterface(cfg)
     elif args.model_type == "llama-2-7b":
         engine = LlamaInterface(cfg)

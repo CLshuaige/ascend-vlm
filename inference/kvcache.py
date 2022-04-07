@@ -46,11 +46,15 @@ class KVCache:
     def evict(self,space_need:int):
         pass
 
-    def getInputs(self, seq_len: int) -> List[np.ndarray]:
+    def getInputs(self, seq_len: int, dim4: False) -> List[np.ndarray]:
         cache,mask = None,None
         if self.fix_size:
             cache,mask = self.kvCache, np.ones((1,self.max_size+seq_len),dtype=np.int64)
             mask[:,self.kv_size:self.max_size] = 0
+            if dim4:
+                mask = np.zeros((1, 1, seq_len, self.max_size+seq_len),dtype=self.dtype)
+                mask[:, :, :seq_len, self.kv_size:self.max_size] = 1
+                mask = mask*np.finfo(self.dtype).min
         else:
             cache,mask = self.kvCache[:,:,:,:,:self.kv_size], np.ones((1,self.kv_size+seq_len),dtype=np.int64)
         pos_id =np.arange(self.input_pos,self.input_pos+seq_len,dtype=np.int64).reshape(1,-1)

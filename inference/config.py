@@ -73,8 +73,10 @@ class InferenceConfig:
         model_desc = None
         with open(self.hf_model_dir+"/config.json") as f:
             model_desc = json.load(f)
-        if self.model_type == "internvl":
+        if self.model_type == "internvl" or self.model_type == "internvl-pact":
             model_desc = model_desc.get('llm_config', {})
+            self.n_layer_pact1 = 6
+            self.n_layer_pact2 = 18
         self.n_layer = model_desc['num_hidden_layers']
         self.head_num = model_desc['num_key_value_heads']
         self.num_kv_group = int(model_desc['num_attention_heads'] / self.head_num)

@@ -32,7 +32,7 @@ free -h && sudo sysctl -w vm.drop_caches=3 && sudo sync && echo 3 | sudo tee /pr
 
 # python ./inference/main.py \
 #     --model_type qwen2vl-pact\
-#     --vision_model /root/Documents/model_dir/Ascend_llms/Qwen2VL/int8_1024_dy/visual_f16_int8.om \
+#     --vision_model /root/Documents/model_dir/Ascend_llms/Qwen2VL/int8_1024_dy/visual_int8_448_252.om \
 #     --embedding_model /root/Documents/model_dir/Ascend_llms/Qwen2VL/fp16_1024_1/embedder.om \
 #     --llm_model /root/Documents/model_dir/Ascend_llms/Qwen2VL/int8_pact/llm.om \
 #     --hf-dir /root/Documents/model_dir/Qwen2-VL-2B-Instruct \
@@ -45,9 +45,24 @@ free -h && sudo sysctl -w vm.drop_caches=3 && sudo sync && echo 3 | sudo tee /pr
 #     --pact_config_path /root/Documents/project/ascend-vlm/inference/pact_configs.json \
 #     --tokenbytoken True \
 
+# python ./inference/main.py \
+#     --model_type internvl\
+#     --vision_model /root/Documents/model_dir/Ascend_llms/Internvl/internvl_visual_model_f16.om \
+#     --embedding_model /root/Documents/model_dir/Ascend_llms/Internvl/internvl_embedder.om \
+#     --llm_model /root/Documents/model_dir/Ascend_llms/Internvl/internvl_language_model_f16.om \
+#     --mlp_model /root/Documents/model_dir/Ascend_llms/Internvl/internvl_mlp.om \
+#     --hf-dir /root/Documents/model_dir/InternVL2-2B \
+#     --engine acl \
+#     --sampling greedy --sampling_value 10 --temperature 0.7 \
+#     --kvcache sliding-window \
+#     --cli \
+#     --kv_size ${KVSIZE} \
+#     --visual_path /root/Documents/project/qwenvl_infer/demo.jpeg \
+#     --tokenbytoken True 
+
 python ./inference/main.py \
-    --model_type internvl\
-    --vision_model /root/Documents/model_dir/Ascend_llms/Internvl/internvl_visual_model_test_3.om \
+    --model_type internvl-pact\
+    --vision_model /root/Documents/model_dir/Ascend_llms/Internvl/internvl_visual_model.om \
     --embedding_model /root/Documents/model_dir/Ascend_llms/Internvl/internvl_embedder.om \
     --llm_model /root/Documents/model_dir/Ascend_llms/Internvl/internvl_language_model.om \
     --mlp_model /root/Documents/model_dir/Ascend_llms/Internvl/internvl_mlp.om \
@@ -58,6 +73,7 @@ python ./inference/main.py \
     --cli \
     --kv_size ${KVSIZE} \
     --visual_path /root/Documents/project/qwenvl_infer/demo.jpeg \
+    --pact_config_path /root/Documents/project/ascend-vlm/inference/pact_configs.json \
     --tokenbytoken True 
 
 # python ./inference/main.py \
