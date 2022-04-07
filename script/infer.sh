@@ -84,7 +84,6 @@ python ./inference/main.py \
     --sampling greedy --sampling_value 10 --temperature 0.7 \
     --kvcache sliding-window \
     --kv_size 1024 \
-    --visual_path /root/Documents/project/qwenvl_infer/demo.jpeg \
     --pact_config_path /root/Documents/project/ascend-vlm/inference/pact_configs.json \
     --tokenbytoken True \
     --cli

@@ -5,20 +5,41 @@ from concurrent.futures import ThreadPoolExecutor
 from config import InferenceConfig
 from inference import LlamaInterface, Qwen2VLInterface, InternVLInterface
 
+import camera
+import time
+
 import log_config
 
-def main(cli:bool,engine):
+def main(args,engine):
     
     ### test image
-    image_path = '/root/Documents/project/qwenvl_infer/demo.jpeg'
+    image_path = args.visual_path
     from PIL import Image
     # load image
-    image = Image.open(image_path)
+    if image_path is not None:
+        image = Image.open(image_path)
+    else:
+        cam = camera.Camera()
+        cam.start()
+        image = cam.get_image()
+        try:
+            while True:
+                image = cam.get_image()
+                if image is not None:
+                    timestamp = time.strftime("%Y%m%d_%H%M%S")
+                    save_path = f"/root/Documents/project/camera/caps/captured_{timestamp}.jpg"
+                    image.save(save_path)
+                    print(f"Image saved to {save_path}")
+                    break
+        finally:
+            cam.stop()
+
     flag = 0
-    if cli:
+    if args.cli:
         while True:
             line = input()
             if flag == 0:
+                engine.reset()
                 print(engine.predict(line, image))
                 flag = 1
             else:
@@ -172,4 +193,4 @@ if __name__ == '__main__':
     else:
         print("Invalid model type")
         sys.exit(1)
-    main(args.cli,engine)
+    main(args,engine)
