@@ -46,7 +46,7 @@ KVSIZE=1024
 
 python ./inference/main.py \
     --model_type internvl\
-    --vision_model /root/Documents/model_dir/Ascend_llms/Internvl/internvl_visual_model_linux_aarch64.om \
+    --vision_model /root/Documents/model_dir/Ascend_llms/Internvl/internvl_visual_model_int8_linux_aarch64.om \
     --embedding_model /root/Documents/model_dir/Ascend_llms/Internvl/internvl_embedder.om \
     --llm_model /root/Documents/model_dir/Ascend_llms/Internvl/internvl_language_model.om \
     --mlp_model /root/Documents/model_dir/Ascend_llms/Internvl/internvl_mlp.om \
