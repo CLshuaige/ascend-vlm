@@ -336,7 +336,7 @@ class AclInternVLSession(Session):
 		# input: pixel_values:1,900,1176
 		self.embedding_model = ACLModel(config.embedding_model,context=self.context,mode=config.acl_mode)
 		# input: input_ids:1,1
-		self.image_pad_id = config.image_pad_id
+		self.image_pad_id = 92546
 		self.format = config.format
 
 		self.input_ids = np.zeros((1,self.max_len),dtype=np.int64)
@@ -365,8 +365,7 @@ class AclInternVLSession(Session):
 		l,r,result = 0,self.max_len,None
 		
 		if pixel_values is not None:
-
-			pixel_values = np.expand_dims(pixel_values,axis=0)
+			# print(f"pixel_values: {pixel_values.shape}")
 			image_embeds = self.vision_model.inference([pixel_values])[0]
 
 			image_embeds = image_embeds[:, 1:, :]

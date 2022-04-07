@@ -11,6 +11,7 @@ def main(cli:bool,engine):
     from PIL import Image
     # load image
     image = Image.open(imga_path)
+    # image = None
     flag = 0
     if cli:
         while True:

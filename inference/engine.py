@@ -144,6 +144,9 @@ class ACLModel:
             _, ret = acl.mdl.add_dataset_buffer(self.input_dataset, data)
             check_ret("add_dataset_buffer",ret)
             dims, ret = acl.mdl.get_input_dims(self.model_desc, i)
+            print(f"dims: {dims}")
+            dims_output, ret_output = acl.mdl.get_output_dims(self.model_desc, i)
+            print(f"output dims: {dims_output}")
             self.inputs.append({"buffer": buffer, "size": buffer_size})
             if self.mode == 'rc':
                 data_type = acl.mdl.get_input_data_type(self.model_desc, i)

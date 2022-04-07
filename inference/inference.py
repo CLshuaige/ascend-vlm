@@ -6,6 +6,9 @@ from session import Session
 from config import InferenceConfig
 from transformers import AutoTokenizer, AutoProcessor
 
+import torch
+import torchvision.transforms as T
+from torchvision.transforms.functional import InterpolationMode
 from PIL import Image
 from qwen_vl_utils import process_vision_info
 import base64
@@ -409,13 +412,16 @@ def is_stop_word_or_prefix(s: str, stop_words: list) -> int:
 class InternVLInterface:
     def __init__(self,config:InferenceConfig) -> None:
 
+        self.IMAGENET_MEAN = (0.485, 0.456, 0.406)
+        self.IMAGENET_STD = (0.229, 0.224, 0.225)
+
         self.monitor = NPUMonitor(interval=0.5, log_file='./logs/npu_memory.log')
         self.monitor.start()
 
         self.max_length = config.max_length
         from transformers import AutoTokenizer
-        self.tokenizer=AutoTokenizer.from_pretrained(config.tokenizer)
-        self.processor = AutoProcessor.from_pretrained(config.hf_model_dir, use_fast=True)
+        self.tokenizer=AutoTokenizer.from_pretrained(config.tokenizer, trust_remote_code=True)
+        # self.processor = AutoProcessor.from_pretrained(config.hf_model_dir, use_fast=True)
         self.sampling_method=config.sampling_method
         self.sampling_value = config.sampling_value
         self.temperature=config.temperature
@@ -433,10 +439,10 @@ class InternVLInterface:
         self.last_output=""
 
         self.image_mask = []
-        self.image_pad_id = config.image_pad_id
+        self.image_pad_id = 92546
         self.chat_history = "" # save the history of chat
 
-        self.processor = AutoProcessor.from_pretrained(config.hf_model_dir, use_fast=True)
+        # self.processor = AutoProcessor.from_pretrained(config.hf_model_dir, use_fast=True)
         self.is_token_by_token = config.is_token_by_token
 
         self.lock = Lock()
@@ -528,18 +534,12 @@ class InternVLInterface:
             self.clear()
         self.format_last_output()
         if self.first:
-            text, image_inputs= self.apply_chat_template([{"role":"system","content":self.system_prompt}, {"role":"user","content":(text,image)}])
+            text, pixel_values= self.apply_chat_template([{"role":"system","content":self.system_prompt}, {"role":"user","content":(text,image)}])
             self.first = False
         else:
-            text, image_inputs = self.apply_chat_template([{"role":"user","content":(text,image)}])
+            text, pixel_values = self.apply_chat_template([{"role":"user","content":(text,image)}])
         self.chat_history += text
-        inputs = self.processor(text=text, images=image_inputs, return_tensors="pt", padding=True)
-        input_ids = inputs["input_ids"]
-        if image is not None:
-            pixel_values = inputs["pixel_values"]
-            pixel_values = np.asarray(pixel_values,dtype=np.float16)
-        else:
-            pixel_values = None
+        input_ids = self.encode(text)
         input_ids = np.asarray(input_ids,dtype=np.int64).reshape(1,-1)
         image_mask = input_ids == self.image_pad_id
         if self.image_mask == []:
@@ -553,7 +553,7 @@ class InternVLInterface:
             pixel_values = None
             input_ids = self.sample_logits(logits[0][-1:], self.sampling_method, self.sampling_value, self.temperature)
             input_ids = input_ids.reshape(1, -1)
-            if input_ids[0] == self.tokenizer.eos_token_id:
+            if input_ids[0] == 92542:
                 #self.session.rollback(1) 
                 break
             ids_list.append(input_ids[0].item())
@@ -598,6 +598,7 @@ class InternVLInterface:
     def apply_chat_template(self,messages:List[Dict[str,str]]) -> str:
         text = ""
         image_inputs = None
+        pixel_values = None
         vision_token = ""
         if self.model_type == "qwen2vl-2b" or self.model_type == "qwen2vl-pact":
             for message in messages:
@@ -630,6 +631,22 @@ class InternVLInterface:
                     text += f'<|im_start|>system\n{message["content"]}<|im_end|>\n'
                 else:
                     text += f'{message["content"]}\n'
+        elif self.model_type == "internvl":
+            for message in messages:
+                if message["role"] == "user":
+                    text_content, image = message["content"]
+                    if image is not None:
+                        if isinstance(image,Image.Image):
+                            base64_image = image.convert("RGB")
+                            pixel_values = self.load_image(base64_image).to(torch.float16).numpy()
+                            text += f'<|im_start|>user\n<img>{"<IMG_CONTEXT>" * 256}</img>\n{text_content}<|im_end|>\n<|im_start|>assistant\n'
+                    else:
+                        text += f'<|im_start|>user\n{text_content}<|im_end|>\n<|im_start|>assistant\n'
+
+                elif message["role"] == "system":
+                    text += f'<|im_start|>system\n{message["content"]}<|im_end|>\n'
+                else:
+                    text += f'{message["content"]}\n'
         elif self.model_type == "tiny-llama":
             for message in messages:
                 if message["role"] == "user":
@@ -638,8 +655,79 @@ class InternVLInterface:
                     text += f'<|system|>\n{message["content"]}</s>\n'
                 else:
                     text += f'{message["content"]}</s>\n'
-        return text, image_inputs
+        return text, pixel_values
     
     def encode(self,text,add_bos_token=False):
         self.tokenizer.add_bos_token = add_bos_token
         return self.tokenizer.encode(text)
+
+    def build_transform(self,input_size):
+        MEAN, STD = self.IMAGENET_MEAN, self.IMAGENET_STD
+        transform = T.Compose([
+            T.Lambda(lambda img: img.convert('RGB') if img.mode != 'RGB' else img),
+            T.Resize((input_size, input_size), interpolation=InterpolationMode.BICUBIC),
+            T.ToTensor(),
+            T.Normalize(mean=MEAN, std=STD)
+        ])
+        return transform
+
+    def find_closest_aspect_ratio(self,aspect_ratio, target_ratios, width, height, image_size):
+        best_ratio_diff = float('inf')
+        best_ratio = (1, 1)
+        area = width * height
+        for ratio in target_ratios:
+            target_aspect_ratio = ratio[0] / ratio[1]
+            ratio_diff = abs(aspect_ratio - target_aspect_ratio)
+            if ratio_diff < best_ratio_diff:
+                best_ratio_diff = ratio_diff
+                best_ratio = ratio
+            elif ratio_diff == best_ratio_diff:
+                if area > 0.5 * image_size * image_size * ratio[0] * ratio[1]:
+                    best_ratio = ratio
+        return best_ratio
+
+    def dynamic_preprocess(self,image, min_num=1, max_num=12, image_size=448, use_thumbnail=False):
+        orig_width, orig_height = image.size
+        aspect_ratio = orig_width / orig_height
+
+        # calculate the existing image aspect ratio
+        target_ratios = set(
+            (i, j) for n in range(min_num, max_num + 1) for i in range(1, n + 1) for j in range(1, n + 1) if
+            i * j <= max_num and i * j >= min_num)
+        target_ratios = sorted(target_ratios, key=lambda x: x[0] * x[1])
+
+        # find the closest aspect ratio to the target
+        target_aspect_ratio = self.find_closest_aspect_ratio(
+            aspect_ratio, target_ratios, orig_width, orig_height, image_size)
+
+        # calculate the target width and height
+        target_width = image_size * target_aspect_ratio[0]
+        target_height = image_size * target_aspect_ratio[1]
+        blocks = target_aspect_ratio[0] * target_aspect_ratio[1]
+
+        # resize the image
+        resized_img = image.resize((target_width, target_height))
+        processed_images = []
+        for i in range(blocks):
+            box = (
+                (i % (target_width // image_size)) * image_size,
+                (i // (target_width // image_size)) * image_size,
+                ((i % (target_width // image_size)) + 1) * image_size,
+                ((i // (target_width // image_size)) + 1) * image_size
+            )
+            # split the image
+            split_img = resized_img.crop(box)
+            processed_images.append(split_img)
+        assert len(processed_images) == blocks
+        if use_thumbnail and len(processed_images) != 1:
+            thumbnail_img = image.resize((image_size, image_size))
+            processed_images.append(thumbnail_img)
+        return processed_images
+
+    def load_image(self,image, input_size=448, max_num=12):
+        transform = self.build_transform(input_size=input_size)
+        image = image.resize((input_size, input_size))
+        images = self.dynamic_preprocess(image, image_size=input_size, use_thumbnail=True, max_num=max_num)
+        pixel_values = [transform(image) for image in images]
+        pixel_values = torch.stack(pixel_values)
+        return pixel_values
