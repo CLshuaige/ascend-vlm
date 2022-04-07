@@ -233,7 +233,7 @@ class AclQwenVLPACTSession(Session):
 			image_embeds = image_embeds.reshape(1,image_embeds.shape[0],-1).astype(np.float16)
 			image_start_pos = np.where(image_mask==True)[1][0]
 			image_len = np.sum(image_mask)
-			self.vision_model.unload()
+			# self.vision_model.unload()
 		else:
 			image_start_pos = -1
 			image_len = 0

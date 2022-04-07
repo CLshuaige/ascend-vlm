@@ -265,6 +265,7 @@ class Qwen2VLInterface:
         else:
             self.session.llm_model.unload()
         self.session.embedding_model.unload()
+        self.session.vision_model.unload()
         self.monitor.stop()
         logging.debug(f"history: {self.chat_history}")
         logging.info("exit!")
@@ -283,8 +284,8 @@ class Qwen2VLInterface:
             self.state['isEnd'],self.state['message'] = False,""        
         if text == "":
             return
-        if text == "exit":
-            self.clear()
+        # if text == "exit" and config.cli:
+        #     self.clear()
         self.format_last_output()
         if self.first:
             text, image_inputs= self.apply_chat_template([{"role":"system","content":self.system_prompt}, {"role":"user","content":(text,image)}])
@@ -308,7 +309,7 @@ class Qwen2VLInterface:
         self.first,ids_list = False,[]
         first_token = True
         for i in range(self.max_length):
-            logits = self.session.run(input_ids, self.image_mask, pixel_values=pixel_values)[0]
+            logits = self.session.run(input_ids, image_mask, pixel_values=pixel_values)[0]
             pixel_values = None
             input_ids = self.sample_logits(logits[0][-1:], self.sampling_method, self.sampling_value, self.temperature)
             input_ids = input_ids.reshape(1, -1)

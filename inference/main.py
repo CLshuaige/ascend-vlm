@@ -27,8 +27,8 @@ def main(cli:bool,engine):
     pool = ThreadPoolExecutor(max_workers=2)        
     app = Flask(
         __name__,
-        static_folder='./dist',  # 设置静态文件夹目录
-        template_folder="./dist",
+        static_folder='./dist1',  # 设置静态文件夹目录
+        template_folder="./dist1",
         static_url_path=""
     )
 
