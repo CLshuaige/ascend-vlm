@@ -29,28 +29,28 @@ KVSIZE=1024
 #     --visual_path /root/Documents/project/qwenvl_infer/demo.jpeg \
 #     #--pact_config_path /root/Documents/project/ascend-vlm/inference/pact_configs.json
 
-python ./inference/main.py \
-    --model_type qwen2vl-pact\
-    --vision_model /root/Documents/model_dir/Ascend_llms/Qwen2VL/fp16_1024_1/visual.om \
-    --embedding_model /root/Documents/model_dir/Ascend_llms/Qwen2VL/fp16_1024_1/embedder.om \
-    --llm_model /root/Documents/model_dir/Ascend_llms/Qwen2VL/int8_pact/llm.om \
-    --hf-dir /root/Documents/model_dir/Qwen2-VL-2B-Instruct \
-    --engine acl \
-    --sampling greedy --sampling_value 10 --temperature 0.7 \
-    --kvcache sliding-window \
-    --cli \
-    --kv_size ${KVSIZE} \
-    --visual_path /root/Documents/project/qwenvl_infer/demo.jpeg \
-    --pact_config_path /root/Documents/project/ascend-vlm/inference/pact_configs.json \
-    --tokenbytoken True \
+# python ./inference/main.py \
+#     --model_type qwen2vl-pact\
+#     --vision_model /root/Documents/model_dir/Ascend_llms/Qwen2VL/fp16_1024_1/visual.om \
+#     --embedding_model /root/Documents/model_dir/Ascend_llms/Qwen2VL/fp16_1024_1/embedder.om \
+#     --llm_model /root/Documents/model_dir/Ascend_llms/Qwen2VL/int8_pact/llm.om \
+#     --hf-dir /root/Documents/model_dir/Qwen2-VL-2B-Instruct \
+#     --engine acl \
+#     --sampling greedy --sampling_value 10 --temperature 0.7 \
+#     --kvcache sliding-window \
+#     --cli \
+#     --kv_size ${KVSIZE} \
+#     --visual_path /root/Documents/project/qwenvl_infer/demo.jpeg \
+#     --pact_config_path /root/Documents/project/ascend-vlm/inference/pact_configs.json \
+#     --tokenbytoken True \
 
 python ./inference/main.py \
     --model_type internvl\
-    --vision_model /root/Documents/model_dir/Ascend_llms/Internvl/internvl_visual_linux_aarch64.om \
+    --vision_model /root/Documents/model_dir/Ascend_llms/Internvl/internvl_visual_model_linux_aarch64.om \
     --embedding_model /root/Documents/model_dir/Ascend_llms/Internvl/internvl_embedder.om \
     --llm_model /root/Documents/model_dir/Ascend_llms/Internvl/internvl_language_model.om \
     --mlp_model /root/Documents/model_dir/Ascend_llms/Internvl/internvl_mlp.om \
-    --hf-dir /root/Documents/model_dir/Qwen2-VL-2B-Instruct \
+    --hf-dir /root/Documents/model_dir/InternVL2-2B \
     --engine acl \
     --sampling greedy --sampling_value 10 --temperature 0.7 \
     --kvcache sliding-window \

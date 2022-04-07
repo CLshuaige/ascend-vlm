@@ -73,13 +73,15 @@ class InferenceConfig:
         model_desc = None
         with open(self.hf_model_dir+"/config.json") as f:
             model_desc = json.load(f)
+        if self.model_type == "internvl":
+            model_desc = model_desc.get('llm_config', {})
         self.n_layer = model_desc['num_hidden_layers']
         self.head_num = model_desc['num_key_value_heads']
         self.num_kv_group = int(model_desc['num_attention_heads'] / self.head_num)
         self.hidden_dim = model_desc["hidden_size"]
         self.head_dim = int(self.hidden_dim / model_desc['num_attention_heads'])
-        if self.hidden_dim == 2048:
-            self.model_type = "tiny-llama"
+        # if self.hidden_dim == 2048:
+        #     self.model_type = "tiny-llama"
         if self.kvcache_method == "streamllm":
             assert(self.head_len+self.evict_len < self.max_cache_size)
         if self.kvcache_method == "H2O":
