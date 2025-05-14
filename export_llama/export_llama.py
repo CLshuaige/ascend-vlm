@@ -4,13 +4,15 @@ import torch
 import os
 from transformers import LlamaForCausalLM, LlamaTokenizer
 
+# device = cuda 0
+device = "cuda:1"
 
 def export_onnx(base_model,out_path,quant_cfg_path,act_path):
     tokenizer= LlamaTokenizer.from_pretrained(base_model)
     model = LlamaForCausalLM.from_pretrained(
         base_model,
         torch_dtype=torch.float16,
-        device_map="auto",
+        device_map=device,
     )
     model_cfg=model.model.config
     spec = importlib.util.spec_from_file_location("quant_cfg_module", quant_cfg_path)
@@ -35,13 +37,13 @@ def export_onnx(base_model,out_path,quant_cfg_path,act_path):
     head_dim = int(model_cfg.hidden_size / model_cfg.num_attention_heads)
 
 
-    input_ids = torch.zeros((batch_size,seq_len)).long().to("cuda") # batch_size, new_sequence_length
-    attention_mask = torch.zeros((batch_size,all_len)).long().to("cuda") # batch_size, all_sequence_length
-    position_ids = torch.zeros((batch_size,seq_len)).long().to("cuda") # batch_size, new_sequence_length
+    input_ids = torch.zeros((batch_size,seq_len)).long().to(device) # batch_size, new_sequence_length
+    attention_mask = torch.zeros((batch_size,all_len)).long().to(device) # batch_size, all_sequence_length
+    position_ids = torch.zeros((batch_size,seq_len)).long().to(device) # batch_size, new_sequence_length
     # past_keys = torch.rand((batch_size,  n_heads,kv_len, head_dim),dtype=torch.float16).to("cuda")
     # past_values = torch.rand((batch_size,n_heads, kv_len, head_dim),dtype=torch.float16).to("cuda")
     # past_key_values = tuple([(past_keys,past_values)] * n_layers)
-    past_key_values = torch.rand((n_layers,2,batch_size,n_heads, kv_len, head_dim),dtype=torch.float16).to("cuda")
+    past_key_values = torch.rand((n_layers,2,batch_size,n_heads, kv_len, head_dim),dtype=torch.float16).to(device)
     input_args = (
         input_ids,
         attention_mask,
