@@ -56,9 +56,9 @@ else:
     flash_attn_varlen_func = None
 
 # use pact
-PACT = True
+PACT = False
 Layer1_4 =False
-Layer5_28 =True
+Layer5_28 =False
 
 logger = logging.get_logger(__name__)
 
@@ -1191,7 +1191,10 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            past_key_value = past_key_values[i-4] if past_key_values is not None else None
+            if PACT and Layer5_28:
+                past_key_value = past_key_values[i-4] if past_key_values is not None else None
+            else:
+                past_key_value = past_key_values[i] if past_key_values is not None else None
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
                     decoder_layer.__call__,

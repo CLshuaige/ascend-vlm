@@ -14,7 +14,7 @@ import time
 import torch
 import lmdb
 import json
-import faiss
+#import faiss
 from types import SimpleNamespace
 
 def load_config(config_path=None):
@@ -855,40 +855,41 @@ def token_reduction_kmeans(X_merge, X_clustering, k, max_iters=100):
         These are the points that will be kept and which values are uptaded in merged and weights.
         weights (torch.Tensor): Tensor of shape [n_samples], weights for proportional attention.
         """
-    n_samples, n_features_merge = X_merge.shape
-    _, n_features_clustering = X_clustering.shape
+    # n_samples, n_features_merge = X_merge.shape
+    # _, n_features_clustering = X_clustering.shape
 
-    X_clustering_np = X_clustering.cpu().numpy()
+    # X_clustering_np = X_clustering.cpu().numpy()
 
-    # Perform K-Means clustering using FAISS
-    kmeans = faiss.Kmeans(d=n_features_clustering, k=k, niter=max_iters, gpu=True)
-    kmeans.train(X_clustering_np)
-    labels = kmeans.index.search(X_clustering_np, 1)[1].flatten() 
-    centroids = torch.tensor(kmeans.centroids).to(X_merge.device)
+    # # Perform K-Means clustering using FAISS
+    # kmeans = faiss.Kmeans(d=n_features_clustering, k=k, niter=max_iters, gpu=True)
+    # kmeans.train(X_clustering_np)
+    # labels = kmeans.index.search(X_clustering_np, 1)[1].flatten() 
+    # centroids = torch.tensor(kmeans.centroids).to(X_merge.device)
 
 
-    labels = torch.tensor(labels, device=X_merge.device)
-    merged = torch.zeros_like(X_merge) 
-    mask = torch.zeros(n_samples, dtype=torch.bool, device=X_merge.device)
-    weights = torch.zeros(n_samples, device=X_merge.device)
+    # labels = torch.tensor(labels, device=X_merge.device)
+    # merged = torch.zeros_like(X_merge) 
+    # mask = torch.zeros(n_samples, dtype=torch.bool, device=X_merge.device)
+    # weights = torch.zeros(n_samples, device=X_merge.device)
 
-    #For each cluster, find the point in X_clustering that is closest to the centroid
-    for i in range(k):
-        cluster_points_clustering = X_clustering[labels == i]
-        cluster_points_merge = X_merge[labels == i]  
-        cluster_indices = torch.where(labels == i)[0]  
+    # #For each cluster, find the point in X_clustering that is closest to the centroid
+    # for i in range(k):
+    #     cluster_points_clustering = X_clustering[labels == i]
+    #     cluster_points_merge = X_merge[labels == i]  
+    #     cluster_indices = torch.where(labels == i)[0]  
         
-        if cluster_points_clustering.shape[0] > 0:
-            # Find the closest point to the centroid in X_clustering
-            centroid = centroids[i].unsqueeze(0) 
-            distances = torch.cdist(cluster_points_clustering.to(torch.float32), centroid.to(torch.float32))
-            closest_idx = distances.argmin().item()
-            closest_point_idx = cluster_indices[closest_idx]
-            merged[closest_point_idx] = cluster_points_merge.mean(dim=0)
-            mask[closest_point_idx] = 1
-            weights[closest_point_idx] = cluster_points_clustering.shape[0]
+    #     if cluster_points_clustering.shape[0] > 0:
+    #         # Find the closest point to the centroid in X_clustering
+    #         centroid = centroids[i].unsqueeze(0) 
+    #         distances = torch.cdist(cluster_points_clustering.to(torch.float32), centroid.to(torch.float32))
+    #         closest_idx = distances.argmin().item()
+    #         closest_point_idx = cluster_indices[closest_idx]
+    #         merged[closest_point_idx] = cluster_points_merge.mean(dim=0)
+    #         mask[closest_point_idx] = 1
+    #         weights[closest_point_idx] = cluster_points_clustering.shape[0]
 
-    return merged, mask, weights, None
+    # return merged, mask, weights, None
+    return None
 
 
 class DPC:

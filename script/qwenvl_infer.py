@@ -21,7 +21,6 @@ device='cuda:1'
 model_path = sys.argv[1]
 #onnx_path = sys.argv[2]
 PACT = True
-
 datatype = np.float16
 sim = True
 # paths = {
@@ -61,7 +60,7 @@ if PACT:
         "llm1.onnx": "/home/chenl/weights/export-models/Qwen2-VL-2B-Instruct/onnx_model/int8_pact/llm_1_4.onnx",
         "llm2.onnx": "/home/chenl/weights/export-models/Qwen2-VL-2B-Instruct/onnx_model/int8_pact/llm_5_28.onnx",
         "embedder.onnx": "/home/chenl/weights/export-models/Qwen2-VL-2B-Instruct/onnx_model/fp16_1024_split/embedder/embedder.onnx",
-        "visual.onnx": "/home/chenl/weights/export-models/Qwen2-VL-2B-Instruct/onnx_model/fp16_1024_split/visual/visual.onnx"
+        "visual.onnx": "/home/chenl/weights/export-models/Qwen2-VL-2B-Instruct/onnx_model/int8_pact/visual/visual_dy.onnx"
     }
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -74,13 +73,15 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
         return hidden_states
     hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-def pact(hidden_states, query_states_before_rope, key_states_before_rope, key_states, query_states, image_mask):
+def pact(hidden_states, query_states_before_rope, key_states_before_rope, key_states, query_states, image_mask, real_position_ids):
+    from types import SimpleNamespace
     pact_config = {
         "visual_token_reduction": True, ## PACT
         "layer_for_reduction": 4,
         "progessive_reduction": False,
         "use_DBDPC": True, ## PACT
-        "cutoff": 0.21, ## PACT
+        #"cutoff": 0.21, ## PACT
+        "cutoff": 0.06,
         "vector_to_use_in_distance_clustering": "current_k_cosine",
         "take_mean": True,
         "include_pruned_in_mean": True,
@@ -112,7 +113,8 @@ def pact(hidden_states, query_states_before_rope, key_states_before_rope, key_st
         "use_IQR_in_token_pruning": False,
         "alpha_IQR": 0.5,
         "pruning_filter_wth_percentage": True,
-        "pruning_tokeep_percentage_value": 0.55,   ##PACT
+        #"pruning_tokeep_percentage_value": 0.55,   ##PACT
+        "pruning_tokeep_percentage_value": 0.55,
         "multiply_by_norm": True,  ## PACT
         "norm_to_use": 2,
         "avoid_numerical_instability_prune": True,
@@ -129,6 +131,27 @@ def pact(hidden_states, query_states_before_rope, key_states_before_rope, key_st
         "use_custom_pruning": False,
         "log_output_path": "agg_pact_logs", ## PACT
     }
+    pact_config = SimpleNamespace(**pact_config)
+
+    # to tensor
+    # input: B, L, N, D
+    if not isinstance(image_mask, torch.Tensor):
+        image_mask = torch.tensor(image_mask, dtype=torch.bool)
+    if not isinstance(hidden_states, torch.Tensor):
+        hidden_states = torch.tensor(hidden_states, dtype=torch.float)
+    if not isinstance(query_states_before_rope, torch.Tensor):
+        query_states_before_rope = torch.tensor(query_states_before_rope, dtype=torch.float).transpose(1, 2)
+    if not isinstance(key_states_before_rope, torch.Tensor):
+        key_states_before_rope = torch.tensor(key_states_before_rope, dtype=torch.float).transpose(1, 2)
+    if not isinstance(key_states, torch.Tensor):
+        key_states = torch.tensor(key_states, dtype=torch.float).permute(0,2,1,3).reshape(1,-1,256)
+
+    if not isinstance(real_position_ids, torch.Tensor):
+        real_position_ids = torch.tensor(real_position_ids, dtype=torch.int64)
+    # Shape: B, N, L, D
+    if image_mask.dim() == 2:
+        image_mask = image_mask.squeeze(0)
+
     image_in_input = True
     if pact_config.visual_token_reduction :
         is_reduction_layer_or_after=True
@@ -153,12 +176,13 @@ def pact(hidden_states, query_states_before_rope, key_states_before_rope, key_st
                 is_not_text[:last_true_idx + 1] = 1
                 is_not_text=is_not_text.bool()
                 
-            if not hasattr(self, 'reduction') :
-                self.reduction=[0,0]
+            
+            reduction=[0,0]
 
             if  pact_config.need_kq :
-                current_k,current_q,current_k_cosine,current_k_cosine,current_q_cosine=key_states_before_rope,query_states_before_rope,key_states,query_states
+                current_k,current_q,current_k_cosine,current_q_cosine=key_states_before_rope,query_states_before_rope,key_states,query_states
                 vector_to_use_in_distance_clustering=eval(pact_config.vector_to_use_in_distance_clustering)
+
 
             ## pruning based reduction starts here
             if pact_config.token_pruning :
@@ -174,7 +198,7 @@ def pact(hidden_states, query_states_before_rope, key_states_before_rope, key_st
                     else :
                         current_k_image=current_k[:,is_image]
                     current_q_image=current_q[:,is_not_text]
-                bsz, q_len, _ = current_q_image.size()
+                bsz, q_len, _, _ = current_q_image.size()
 
                 num_key_value_heads = 2
                 head_dim = 128
@@ -257,7 +281,7 @@ def pact(hidden_states, query_states_before_rope, key_states_before_rope, key_st
                 first_mask=torch.ones_like(is_image.nonzero()).squeeze().bool()
 
             if pact_config.synchro or pact_config.get_reduction_ratio :
-                self.reduction[0]+=first_mask.shape[0]
+                reduction[0]+=first_mask.shape[0]
             first_mask_global=is_image.clone()
             first_mask_global[is_image]=first_mask.clone()
 
@@ -266,14 +290,14 @@ def pact(hidden_states, query_states_before_rope, key_states_before_rope, key_st
             
             if pact_config.use_DBDPC:
                 #real_position_ids 3,1,seqlen
-                real_position_ids_after_mask_image=real_position_ids.permute(2,1,0)[first_mask_global]  #N,3,1
+                real_position_ids_after_mask_image=real_position_ids.permute(2,1,0)[first_mask_global]  #N,1,3
                 if not pact_config.include_pruned_in_mean :
-                    merged,second_mask,weights,position_ids_after_reduction=token_reduction(hidden_states[:,first_mask_global].squeeze(0),vector_to_use_in_distance_clustering[:,first_mask_global].squeeze(0),position_ids=real_position_ids_after_mask_image,reduction=self.reduction,cutoff=pact_config.cutoff,pact_config=pact_config)
+                    merged,second_mask,weights,position_ids_after_reduction=token_reduction(hidden_states[:,first_mask_global].squeeze(0),vector_to_use_in_distance_clustering[:,first_mask_global].squeeze(0),position_ids=real_position_ids_after_mask_image,reduction=None,cutoff=pact_config.cutoff,pact_config=pact_config)
                 else :
                     if pact_config.do_not_consider_non_image_tokens_as_pruned :
-                        merged,second_mask,weights,position_ids_after_reduction=token_reduction(hidden_states[:,first_mask_global].squeeze(0),vector_to_use_in_distance_clustering[:,first_mask_global].squeeze(0),position_ids=real_position_ids_after_mask_image,reduction=self.reduction,cutoff=pact_config.cutoff,pruned_hiddens=hidden_states[:,is_image][:,~first_mask].squeeze(0),pruned_keys=vector_to_use_in_distance_clustering[:,is_image][:,~first_mask].squeeze(0),pact_config=pact_config)
+                        merged,second_mask,weights,position_ids_after_reduction=token_reduction(hidden_states[:,first_mask_global].squeeze(0),vector_to_use_in_distance_clustering[:,first_mask_global].squeeze(0),position_ids=real_position_ids_after_mask_image,reduction=None,cutoff=pact_config.cutoff,pruned_hiddens=hidden_states[:,is_image][:,~first_mask].squeeze(0),pruned_keys=vector_to_use_in_distance_clustering[:,is_image][:,~first_mask].squeeze(0),pact_config=pact_config)
                     else :
-                        merged,second_mask,weights,position_ids_after_reduction=token_reduction(hidden_states[:,first_mask_global].squeeze(0),vector_to_use_in_distance_clustering[:,first_mask_global].squeeze(0),position_ids=real_position_ids_after_mask_image,reduction=self.reduction,cutoff=pact_config.cutoff,pruned_hiddens=hidden_states[:,~first_mask_global].squeeze(0),pruned_keys=vector_to_use_in_distance_clustering[:,~first_mask_global].squeeze(0),pact_config=pact_config)
+                        merged,second_mask,weights,position_ids_after_reduction=token_reduction(hidden_states[:,first_mask_global].squeeze(0),vector_to_use_in_distance_clustering[:,first_mask_global].squeeze(0),position_ids=real_position_ids_after_mask_image,reduction=None,cutoff=pact_config.cutoff,pruned_hiddens=hidden_states[:,~first_mask_global].squeeze(0),pruned_keys=vector_to_use_in_distance_clustering[:,~first_mask_global].squeeze(0),pact_config=pact_config)
                 if pact_config.get_mean_position_id:
                     position_ids_after_reduction=position_ids_after_reduction.to(real_position_ids.dtype).permute(2,1,0)
                     position_ids[:3,:,:][:,:,first_mask_global]=position_ids_after_reduction
@@ -282,7 +306,7 @@ def pact(hidden_states, query_states_before_rope, key_states_before_rope, key_st
                 hidden_states[:,first_mask_global]=merged.unsqueeze(0)
                 second_mask=second_mask.squeeze()
                 if pact_config.synchro or pact_config.get_reduction_ratio:
-                    self.reduction[1]+=second_mask.sum().item()
+                    reduction[1]+=second_mask.sum().item()
 
             elif pact_config.use_custom_merging :
                 real_position_ids_after_mask_image=real_position_ids.permute(2,1,0)[first_mask_global]  #N,3,1
@@ -298,55 +322,60 @@ def pact(hidden_states, query_states_before_rope, key_states_before_rope, key_st
                 hidden_states[:,first_mask_global]=merged.unsqueeze(0)
                 second_mask=second_mask.squeeze()
                 if pact_config.synchro or pact_config.get_reduction_ratio:
-                    self.reduction[1]+=second_mask.sum().item()
+                    reduction[1]+=second_mask.sum().item()
             elif pact_config.use_tome :
-                if index>=1 :
-                    sizes=torch.exp(self.weights[index-1].squeeze()[first_mask_global]) #we store weights as log values so need to revert them back
-                else :
-                    sizes=torch.ones_like(hidden_states[:,first_mask_global].squeeze()[:,0])
-                n_layers=len(self.layers)
-                if index==0 :
-                    effective_percentage_to_keep=1-(1-pact_config.perc_tokeep_tome_total)*((n_layers-pact_config.tome_equivalant_layer_for_reduction)/n_layers)
-                    r_intial=6*n_layers*(1-effective_percentage_to_keep)/((n_layers+1)*(2*n_layers+1)) *(is_image.sum())
-                r=int(r_intial*((n_layers-index)/n_layers))+1
-                merged,second_mask,weights,_=token_reduction_tome(hidden_states[:,first_mask_global].squeeze(0),vector_to_use_in_distance_clustering[:,first_mask_global].squeeze(0), sizes,reduction=self.reduction,r=r)
-                if pact_config.take_mean :
-                    hidden_states[:,first_mask_global]=merged.unsqueeze(0)
-                second_mask=second_mask.squeeze()
-                
-            elif pact_config.use_kmeans and index==pact_config.layer_for_reduction :
-                k=int(pact_config.perc_tokeep_kmeans*is_image.sum())
-                merged,second_mask,weights,_=token_reduction_kmeans(hidden_states[:,first_mask_global].squeeze(0),vector_to_use_in_distance_clustering[:,first_mask_global].squeeze(0), k=k)
-                hidden_states[:,first_mask_global]=merged.unsqueeze(0)
-                second_mask=second_mask.squeeze()
-                if pact_config.synchro or pact_config.get_reduction_ratio:
-                    self.reduction[1]+=second_mask.sum().item()
-            elif pact_config.use_dpc and index==pact_config.layer_for_reduction :
-                merged,second_mask,weights,_=token_reduction_dpc(hidden_states[:,first_mask_global].squeeze(0),vector_to_use_in_distance_clustering[:,first_mask_global].squeeze(0), pact_config.percentage_to_keep_dpc,reduction=self.reduction)
-                hidden_states[:,first_mask_global]=merged.unsqueeze(0)
-                second_mask=second_mask.squeeze()
-                if pact_config.synchro or pact_config.get_reduction_ratio:
-                    self.reduction[1]+=second_mask.sum().item()
-            elif pact_config.use_dbscan and index==pact_config.layer_for_reduction :
-                merged,second_mask,weights,_=token_reduction_dbscan(hidden_states[:,first_mask_global].squeeze(0),vector_to_use_in_distance_clustering[:,first_mask_global].squeeze(0), eps=pact_config.eps_dbscan,isolate_noise_as_clusters=pact_config.noise_as_clusters_dbscan,reduction=self.reduction)
-                hidden_states[:,first_mask_global]=merged.unsqueeze(0)
-                second_mask=second_mask.squeeze()
-                if pact_config.synchro or pact_config.get_reduction_ratio:
-                    self.reduction[1]+=second_mask.sum().item()
-            elif pact_config.use_agglomerative and index==pact_config.layer_for_reduction :
-                merged,second_mask,weights,_=token_reduction_agglomerative(hidden_states[:,first_mask_global].squeeze(0),vector_to_use_in_distance_clustering[:,first_mask_global].squeeze(0), pact_config.percentage_to_keep_agglomerative,reduction=self.reduction,linkage=pact_config.linkage)
-                hidden_states[:,first_mask_global]=merged.unsqueeze(0)
-                second_mask=second_mask.squeeze()
-                if pact_config.synchro or pact_config.get_reduction_ratio:
-                    self.reduction[1]+=second_mask.sum().item()
+                pass
+                # if index>=1 :
+                #     sizes=torch.exp(self.weights[index-1].squeeze()[first_mask_global]) #we store weights as log values so need to revert them back
+                # else :
+                #     sizes=torch.ones_like(hidden_states[:,first_mask_global].squeeze()[:,0])
+                # n_layers=len(self.layers)
+                # if index==0 :
+                #     effective_percentage_to_keep=1-(1-pact_config.perc_tokeep_tome_total)*((n_layers-pact_config.tome_equivalant_layer_for_reduction)/n_layers)
+                #     r_intial=6*n_layers*(1-effective_percentage_to_keep)/((n_layers+1)*(2*n_layers+1)) *(is_image.sum())
+                # r=int(r_intial*((n_layers-index)/n_layers))+1
+                # merged,second_mask,weights,_=token_reduction_tome(hidden_states[:,first_mask_global].squeeze(0),vector_to_use_in_distance_clustering[:,first_mask_global].squeeze(0), sizes,reduction=self.reduction,r=r)
+                # if pact_config.take_mean :
+                #     hidden_states[:,first_mask_global]=merged.unsqueeze(0)
+                # second_mask=second_mask.squeeze()              
+            elif pact_config.use_kmeans :
+                pass
+                # k=int(pact_config.perc_tokeep_kmeans*is_image.sum())
+                # merged,second_mask,weights,_=token_reduction_kmeans(hidden_states[:,first_mask_global].squeeze(0),vector_to_use_in_distance_clustering[:,first_mask_global].squeeze(0), k=k)
+                # hidden_states[:,first_mask_global]=merged.unsqueeze(0)
+                # second_mask=second_mask.squeeze()
+                # if pact_config.synchro or pact_config.get_reduction_ratio:
+                #     self.reduction[1]+=second_mask.sum().item()
+            elif pact_config.use_dpc :
+                pass
+                # merged,second_mask,weights,_=token_reduction_dpc(hidden_states[:,first_mask_global].squeeze(0),vector_to_use_in_distance_clustering[:,first_mask_global].squeeze(0), pact_config.percentage_to_keep_dpc,reduction=self.reduction)
+                # hidden_states[:,first_mask_global]=merged.unsqueeze(0)
+                # second_mask=second_mask.squeeze()
+                # if pact_config.synchro or pact_config.get_reduction_ratio:
+                #     self.reduction[1]+=second_mask.sum().item()
+            elif pact_config.use_dbscan :
+                pass
+                # merged,second_mask,weights,_=token_reduction_dbscan(hidden_states[:,first_mask_global].squeeze(0),vector_to_use_in_distance_clustering[:,first_mask_global].squeeze(0), eps=pact_config.eps_dbscan,isolate_noise_as_clusters=pact_config.noise_as_clusters_dbscan,reduction=self.reduction)
+                # hidden_states[:,first_mask_global]=merged.unsqueeze(0)
+                # second_mask=second_mask.squeeze()
+                # if pact_config.synchro or pact_config.get_reduction_ratio:
+                #     self.reduction[1]+=second_mask.sum().item()
+            elif pact_config.use_agglomerative :
+                pass
+                # merged,second_mask,weights,_=token_reduction_agglomerative(hidden_states[:,first_mask_global].squeeze(0),vector_to_use_in_distance_clustering[:,first_mask_global].squeeze(0), pact_config.percentage_to_keep_agglomerative,reduction=self.reduction,linkage=pact_config.linkage)
+                # hidden_states[:,first_mask_global]=merged.unsqueeze(0)
+                # second_mask=second_mask.squeeze()
+                # if pact_config.synchro or pact_config.get_reduction_ratio:
+                #     self.reduction[1]+=second_mask.sum().item()
             else :
-                second_mask=torch.ones_like(first_mask_global.nonzero()).squeeze().bool()
-                if index==pact_config.layer_for_reduction :
-                    weights=torch.ones_like(second_mask).to(hidden_states.dtype)
-                else :
-                    weights=self.weights[index-1].squeeze()[first_mask_global]
-                if pact_config.synchro or pact_config.get_reduction_ratio:
-                    self.reduction[1]+=second_mask.sum().item()
+                pass
+                # second_mask=torch.ones_like(first_mask_global.nonzero()).squeeze().bool()
+                # if index==pact_config.layer_for_reduction :
+                #     weights=torch.ones_like(second_mask).to(hidden_states.dtype)
+                # else :
+                #     weights=self.weights[index-1].squeeze()[first_mask_global]
+                # if pact_config.synchro or pact_config.get_reduction_ratio:
+                #     self.reduction[1]+=second_mask.sum().item()
 
             weights_final=torch.ones_like(is_image).to(torch.float16)
             weights_final[first_mask_global]=weights.to(torch.float16)
@@ -356,11 +385,11 @@ def pact(hidden_states, query_states_before_rope, key_states_before_rope, key_st
             mask_final[is_image]= first_mask
             mask_final[first_mask_global]=second_mask
             
-            position_ids=position_ids[:,:,mask_final]
+            #position_ids=position_ids[:,:,mask_final]
             hidden_states=hidden_states[:,mask_final]
             real_position_ids=real_position_ids[:,:,mask_final]
-            cache_position=cache_position[mask_final.squeeze()]
-            position_embeddings=(position_embeddings[0][:,:,mask_final],position_embeddings[1][:,:,mask_final])
+            #cache_position=cache_position[mask_final.squeeze()]
+            #position_embeddings=(position_embeddings[0][:,:,mask_final],position_embeddings[1][:,:,mask_final])
             weights = weights[:,mask_final]
             weights = torch.log(weights)
 
@@ -373,7 +402,7 @@ def pact(hidden_states, query_states_before_rope, key_states_before_rope, key_st
                 #     self.weights=dict()
                 # self.weights[index]=weights
             else :
-                self.weights=weights
+                weights=weights
 
             weights_forward=weights
 
@@ -383,22 +412,23 @@ def pact(hidden_states, query_states_before_rope, key_states_before_rope, key_st
             weights_forward=weights_forward.to(hidden_states.dtype).unsqueeze(0).unsqueeze(0)
             if pact_config.get_performance_metrics :
                 torch.cuda.synchronize() 
-                self.total_algo_time+=time.time()-start_algo
+                total_algo_time+=time.time()-start_algo
 
         elif is_reduction_layer : 
-            if pact_config.progessive_reduction :
-                self.weights[index]=torch.cat((self.weights[index],torch.zeros(self.weights[index].size(0), hidden_states.shape[1], device=self.weights[index].device)),dim=-1)
-                weights_forward=self.weights[index]
-            else :
-                self.weights=torch.cat((self.weights,torch.zeros(self.weights.size(0), hidden_states.shape[1], device=self.weights.device)),dim=-1)
-                weights_forward=self.weights
+            # if pact_config.progessive_reduction :
+            #     self.weights[index]=torch.cat((self.weights[index],torch.zeros(self.weights[index].size(0), hidden_states.shape[1], device=self.weights[index].device)),dim=-1)
+            #     weights_forward=self.weights[index]
+            # else :
+            #     self.weights=torch.cat((self.weights,torch.zeros(self.weights.size(0), hidden_states.shape[1], device=self.weights.device)),dim=-1)
+            #     weights_forward=self.weights
             
             seq_len = real_position_ids.shape[2]
             weights_forward=weights_forward.squeeze().unsqueeze(0).repeat(seq_len,1)
             weights_forward=weights_forward.to(hidden_states.dtype).unsqueeze(0).unsqueeze(0)
 
     if pact_config.visual_token_reduction and pact_config.synchro and image_in_input:
-        self.mean_visual_tokens_all[0]+=position_ids[3:,:,:].bool().squeeze().sum().item()
+        pass
+        #self.mean_visual_tokens_all[0]+=position_ids[3:,:,:].bool().squeeze().sum().item()
 
     if weights_forward is not None and pact_config.no_proportional_attention :
         weights_forward=None
@@ -406,6 +436,12 @@ def pact(hidden_states, query_states_before_rope, key_states_before_rope, key_st
     if pact_config.change_position_ids and image_in_input :
         batch_size, seq_len = real_position_ids.shape
         real_position_ids[:] = torch.arange(seq_len).unsqueeze(0).expand(batch_size, seq_len).to(real_position_ids.device).to(real_position_ids.dtype)
+
+    position_ids = real_position_ids
+    hidden_states = hidden_states
+
+    return hidden_states, position_ids, weights, reduction
+
 
 sessions = {m: ort.InferenceSession(path, 
                                 sess_options=session_options, 
@@ -462,9 +498,13 @@ len_image_embeds = 0
 if visual:
     # Process image
     image_url = '/home/chenl/project/ascend/llm-export/script/demo.jpeg'
+
     w, h = 420, 420
+    if w:
+        image = Image.open(image_url).resize((w, h)).convert('RGB')
     #image = Image.open(BytesIO(requests.get(image_url).content)).resize((w, h)).convert('RGB')
-    image = Image.open(image_url).resize((w, h)).convert('RGB')
+    else:
+        image = Image.open(image_url).convert('RGB')
     image_array = np.expand_dims(np.transpose(np.array(image).astype(np.float32), (2, 0, 1)), axis=0) / 255.0
     pixel_values = preprocess_image(image_array)[0].astype(datatype)
     pixel_values = pixel_values[np.newaxis, :, :]
@@ -478,7 +518,7 @@ if visual:
     visual_embeds = visual_embeds[np.newaxis, :, :]
     len_image_embeds = visual_embeds.shape[1]
 
-prompt = "Describe the image. Is there a dog in the image?"
+prompt = "Is there a dog in the image?"
 
 
 formatted_prompt = f"\n<|im_start|>user\n<|vision_start|>{'<|image_pad|>' * len_image_embeds}<|vision_end|>{prompt}<|im_end|>\n<|im_start|>assistant\n"
@@ -534,7 +574,7 @@ if PACT:
     print(f"past_key_values input shape: {sessions['llm2.onnx'].get_inputs()[2].shape}, type: {sessions['llm2.onnx'].get_inputs()[2].type}")
     print(f"input_embeds input shape: {sessions['llm2.onnx'].get_inputs()[3].shape}, type: {sessions['llm2.onnx'].get_inputs()[3].type}")
 #print(f"attention_mask input shape: {sessions['llm.onnx'].get_inputs()[0].shape}, type: {sessions['llm.onnx'].get_inputs()[0].type}")
-def get_attention_mask(input_length, cache_pos=-1, dim4=True):
+def get_attention_mask(input_length, cache_pos=-1, kvcache_len=1024, dim4=True):
     # if gen_len == 0:
     #     attention_mask = np.ones((1, 1, input_lengths, input_lengths), dtype=np.float32)
     #     tril_mask = np.tril(np.ones((input_lengths, input_lengths), dtype=np.float32))
@@ -559,8 +599,14 @@ def get_attention_mask(input_length, cache_pos=-1, dim4=True):
 def get_position_ids(position=0, image_start_pos=5, len_image_embeds=225):
     if position < image_start_pos:
         position_ids = np.array([[position]], dtype=np.int64)
-    if position >= image_start_pos and position < image_start_pos + len_image_embeds:
+    elif position >= image_start_pos and position < image_start_pos + len_image_embeds:
         position_ids = np.array([[image_start_pos]], dtype=np.int64)
+        position_ids = np.repeat(position_ids[np.newaxis], 3, axis=0)
+        ## 3d position
+        position_ids[0, 0, 0] = image_start_pos
+        position_ids[1, 0, 0] = (position - image_start_pos) // 15
+        position_ids[2, 0, 0] = (position - image_start_pos) % 15
+        return position_ids
     else:
         position_ids = np.array([[position-(len_image_embeds)+1]], dtype=np.int64)
     # convert from 1,1 to 3,1,1
@@ -576,15 +622,25 @@ cache_pos = -1
 # past_key_values
 # kv cache
 past_key_values = np.zeros((num_layers, 2, 1, 2, kvcache_len, 128), dtype=datatype)
+if PACT:
+    past_key_values_1 = np.zeros((4, 2, 1, 2, kvcache_len, 128), dtype=datatype)
+    past_key_values_2 = np.zeros((24, 2, 1, 2, kvcache_len//2, 128), dtype=datatype)
 # cache_pos --> the position of the kv cache
 
 # Generate tokens
 start_time = time.time()
 max_iter = 1024
+query_states_before_rope_list = []
+key_states_before_ropes_list = []
+key_states_list = []
+hidden_states_list = []
+real_postition_ids = []
+llm2_weights = None
+pruned_length = -1
 
 for i in range(max_iter):  # MAX_ITERATIONS
     
-    position_ids= get_position_ids(position=i, image_start_pos=1000, len_image_embeds=len_image_embeds)
+    position_ids= get_position_ids(position=i, image_start_pos=5, len_image_embeds=225)
     attention_mask = get_attention_mask(input_length=1, cache_pos=cache_pos)
     #cache_position = get_cache_postition(position=i)
     if i < pre_embeds_len:
@@ -594,34 +650,112 @@ for i in range(max_iter):  # MAX_ITERATIONS
         input_embed = get_embeddings(token_id)
         #input_embed = np.expand_dims(input_embed, axis=0)
     
-    # print(position_ids)
-    # print(attention_mask)
-    # print(input_embed)
+    # stage 1
+    image_end_indice = 230
+    if PACT and i < pre_embeds_len:
+        hidden_states, new_kvcache, query_states_before_rope, key_states_before_rope = sessions['llm1.onnx'].run(
+            outputs['llm1.onnx'],
+            dict(zip(inputs['llm1.onnx'],
+                [attention_mask, position_ids, past_key_values_1, input_embed]))
+        )
+        key_states = new_kvcache[3, 0]
+        past_key_values_1[:, :, :, :, i:i+1, :] = new_kvcache[:, :, :, :, :, :]
+        cache_pos += 1
 
-    logits, new_kvcache = sessions['llm.onnx'].run(
-        outputs['llm.onnx'],
-        dict(zip(inputs['llm.onnx'],
-            [attention_mask, position_ids, past_key_values, input_embed]))
-    )
+        query_states_before_rope_list.append(query_states_before_rope)
+        key_states_before_ropes_list.append(key_states_before_rope)
+        key_states_list.append(key_states)
+        hidden_states_list.append(hidden_states)
+        real_postition_ids.append(position_ids)
 
-    # outputs = model(attention_mask=torch.tensor(attention_mask, device=device),
-    #                 position_ids=torch.tensor(position_ids, device=device),
-    #                 past_key_values=torch.tensor(past_key_values, device=device),
-    #                 inputs_embeds=torch.tensor(input_embed, device=device),)
-    # print(outputs)
+        if i == pre_embeds_len-1:
 
-    # print(f"logits shape: {logits.shape}")
-    #print(f"presents_kvcache shape: {new_kvcache.shape}")
-    if i >= pre_embeds_len-1:
+            query_states_before_rope = np.concatenate(query_states_before_rope_list, axis=2)
+            key_states_before_rope = np.concatenate(key_states_before_ropes_list, axis=2)
+            key_states = np.concatenate(key_states_list, axis=2)
+            hidden_states = np.concatenate(hidden_states_list, axis=1)
+            real_postition_ids = np.concatenate(real_postition_ids, axis=2)
+
+
+            image_hidden_states = hidden_states
+            pruned_hidden_states, pruned_position_ids, weights, reduction= pact(image_hidden_states, query_states_before_rope, key_states_before_rope, key_states, None, image_mask, real_postition_ids)
+            print(weights)
+            print(pruned_position_ids)
+            print(reduction)
+            pruned_length = pruned_hidden_states.shape[1]
+            
+            llm2_weights = weights
+            for j in range(pruned_length):
+
+                attention_mask = get_attention_mask(input_length=1, cache_pos=j-1, kvcache_len=512, dim4=True)
+                attention_mask[..., :j+1] = weights[:, :j+1].view(1, 1, 1, -1).cpu().numpy().astype(datatype)
+                position_ids = pruned_position_ids[:, :, j:j+1].cpu().numpy()
+                hidden_states = pruned_hidden_states[:, j:j+1, :].cpu().numpy().astype(datatype)
+                
+                logits, new_kvcache = sessions['llm2.onnx'].run(
+                    outputs['llm2.onnx'],
+                    dict(zip(inputs['llm2.onnx'],
+                        [attention_mask, position_ids, past_key_values_2, hidden_states]))
+                )
+
+                past_key_values_2[:, :, :, :, j:j+1, :] = new_kvcache[:, :, :, :, :, :]
+
+            token_id = np.argmax(logits)
+
+            if token_id in [151643, 151645]:  # End tokens
+                print(token_id, tokenizer.decode(token_id))
+                break
+
+            print(tokenizer.decode(token_id), end='', flush=True)
+            
+
+        # stage 2
+    elif PACT and i >= pre_embeds_len:
+
+        hidden_states, new_kvcache, query_states_before_rope, key_states_before_rope = sessions['llm1.onnx'].run(
+            outputs['llm1.onnx'],
+            dict(zip(inputs['llm1.onnx'],
+                [attention_mask, position_ids, past_key_values_1, input_embed]))
+        )
+        past_key_values_1[:, :, :, :, i:i+1, :] = new_kvcache[:, :, :, :, :, :]
+
+        new_index = pruned_length+i-pre_embeds_len
+        attention_mask = get_attention_mask(input_length=1, cache_pos=new_index-1, kvcache_len=512, dim4=True)
+        attention_mask[..., :j+1] = llm2_weights[:, :j+1].view(1, 1, 1, -1).cpu().numpy().astype(datatype)
+
+        logits, new_kvcache = sessions['llm2.onnx'].run(
+            outputs['llm2.onnx'],
+            dict(zip(inputs['llm2.onnx'],
+                [attention_mask, position_ids, past_key_values_2, hidden_states]))
+        )
+        
         token_id = np.argmax(logits)
-        if token_id in [151643, 151645] and i >= pre_embeds_len:  # End tokens
+
+        if token_id in [151643, 151645]:  # End tokens
             print(token_id, tokenizer.decode(token_id))
             break
 
         print(tokenizer.decode(token_id), end='', flush=True)
-    # update kv cache
-    past_key_values[:, :, :, :, i:i+1, :] = new_kvcache[:, :, :, :, :, :]
-    cache_pos += 1
+        past_key_values_2[:, :, :, :, new_index:new_index+1, :] = new_kvcache[:, :, :, :, :, :]
+        cache_pos += 1
+    ## normal inference
+    else:
+        logits, new_kvcache = sessions['llm.onnx'].run(
+            outputs['llm.onnx'],
+            dict(zip(inputs['llm.onnx'],
+                [attention_mask, position_ids, past_key_values, input_embed]))
+        )
+
+        if i >= pre_embeds_len-1:
+            token_id = np.argmax(logits)
+            if token_id in [151643, 151645] and i >= pre_embeds_len:  # End tokens
+                print(token_id, tokenizer.decode(token_id))
+                break
+
+            print(tokenizer.decode(token_id), end='', flush=True)
+        # update kv cache
+        past_key_values[:, :, :, :, i:i+1, :] = new_kvcache[:, :, :, :, :, :]
+        cache_pos += 1
 
 
 print(f"\nTotal time: {time.time() - start_time:.2f}s")

@@ -16,9 +16,9 @@ from transformers import Qwen2VLForConditionalGeneration, AutoTokenizer, AutoPro
 device = "cuda:1"
 opeset_version = 15
 
-PACT = True
-Layer1_4 = False
-Layer5_28 = True
+PACT = False
+Layer1_4 = True
+Layer5_28 = False
 
 export_llm = True
 export_embedder = False
@@ -49,7 +49,7 @@ def export_onnx(base_model,out_path,quant_cfg_path,act_path):
     if PACT and Layer1_4:
         output_names = ["hidden_states","out_key_values", "query_states", "key_states"]
     dynamic_axes = {
-        "attention_mask": { 0: "batch_size",2:"all_len" },
+        "attention_mask": { 0: "batch_size",2:"seq_length",3:"total_len" },
         "position_ids": { 1: "batch_size", 2: "seq_length" },
         "past_key_values": { 2: "batch_size", 4: "kv_len" },
         "input_embeds": { 0: "batch_size", 1: "seq_length" },
@@ -149,6 +149,7 @@ def export_onnx(base_model,out_path,quant_cfg_path,act_path):
 
     if export_visual:
         model = llm_model.visual
+        quantize(model,quantize_cfg)
         out_path = out_path.replace("llm.onnx","visual.onnx")
         input_args = (
             pixel_values,
@@ -156,6 +157,7 @@ def export_onnx(base_model,out_path,quant_cfg_path,act_path):
         input_names = ["pixel_values"]
         output_names = ["embeddings"]
         dynamic_axes = {
+            "pixel_values": { 0: "batch_size", 1: "patch_num", 2: "value_num" },
         }
         torch.onnx.export(
             model,
