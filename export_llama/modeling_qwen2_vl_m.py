@@ -55,10 +55,12 @@ if is_flash_attn_2_available():
 else:
     flash_attn_varlen_func = None
 
+import os
 # use pact
-PACT = False
-Layer1_4 =False
-Layer5_28 =False
+PACT = os.getenv("PACT")
+Layer1_4 = os.getenv("Layer1_4")
+Layer5_28 = os.getenv("Layer5_28")
+
 
 logger = logging.get_logger(__name__)
 

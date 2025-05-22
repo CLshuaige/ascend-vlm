@@ -15,14 +15,14 @@ from transformers import Qwen2VLForConditionalGeneration, AutoTokenizer, AutoPro
 # device = cuda 0
 device = "cuda:1"
 opeset_version = 15
+PACT = os.getenv("PACT")
+Layer1_4 = os.getenv("Layer1_4")
+Layer5_28 = os.getenv("Layer5_28")
 
-PACT = False
-Layer1_4 = True
-Layer5_28 = False
+export_llm = os.getenv("export_llm")
+export_embedder = os.getenv("export_embedder")
+export_visual = os.getenv("export_visual")
 
-export_llm = True
-export_embedder = False
-export_visual = False
 
 def export_onnx(base_model,out_path,quant_cfg_path,act_path):
     #= LlamaTokenizer.from_pretrained(base_model)
@@ -34,12 +34,14 @@ def export_onnx(base_model,out_path,quant_cfg_path,act_path):
     processor = AutoProcessor.from_pretrained(base_model)
     model_cfg=model.model.config
     llm_model = model
-    spec = importlib.util.spec_from_file_location("quant_cfg_module", quant_cfg_path)
-    quant_cfg_module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(quant_cfg_module)
-    quantize_cfg = quant_cfg_module.get(model_cfg,act_path)
-    from quantize import quantize
-    quantize(llm_model,quantize_cfg)
+
+    if quant_cfg_path is not "":
+        spec = importlib.util.spec_from_file_location("quant_cfg_module", quant_cfg_path)
+        quant_cfg_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(quant_cfg_module)
+        quantize_cfg = quant_cfg_module.get(model_cfg,act_path)
+        from quantize import quantize
+        quantize(llm_model,quantize_cfg)
     
     input_names = ["attention_mask", "position_ids","past_key_values", "input_embeds",
                    ]
@@ -199,7 +201,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--quant","-q",
         type=str,
-        default="./config/w8x8.py",
+        default="",
         help="path to quant config",
     )
     parser.add_argument(

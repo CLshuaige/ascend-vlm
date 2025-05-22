@@ -1,3 +1,12 @@
+export PACT=False
+export Layer1_4 = True
+export Layer5_28 = False
+
+export export_llm = True
+export export_embedder = False
+export export_visual = False
+
+
 # python ../export_llama/export_qwen2_vl.py \
 # 	--model /home/chenl/weights/hf-models/Qwen2-VL-2B-Instruct \
 # 	--output /home/chenl/weights/export-models/Qwen2-VL-2B-Instruct/onnx_model/fp16_1024_4dim_attention/llm/llm.onnx \
