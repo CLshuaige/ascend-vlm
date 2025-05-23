@@ -62,6 +62,7 @@ dtype2NpType = {ACL_FLOAT:np.float32,ACL_FLOAT16:np.float16,ACL_INT8:np.int8,ACL
 dtypeMp = {ACL_FLOAT:NPY_FLOAT32,ACL_FLOAT16:NPY_FLOAT16,ACL_INT8:NPY_INT8,ACL_INT32:NPY_INT32,ACL_INT64:NPY_INT64}
 class ACLModel:
     def __init__(self,model_path,mode="rc",context=None,callback=None):
+        self.model_name = model_path.split("/")[-1]
         self.context = context
         self.model_id = None
         self.model_desc = None
@@ -77,6 +78,7 @@ class ACLModel:
         self.in_arrs:List[np.ndarray] = []
         self.out_arrs:List[np.ndarray] = []
         self.loadModel(model_path)
+        print(f"{self.model_name} loaded")
         self.allocateMem()
         if not callback:
             return
@@ -97,6 +99,7 @@ class ACLModel:
             ret = acl.rt.destroy_stream(self.stream)
         self.freeMem()
         self.unloadModel()  
+        print(f"{self.model_name} unloaded")
 
     def loadModel(self, model_path):
         '''
@@ -162,10 +165,10 @@ class ACLModel:
             self.outputs.append({"buffer": buffer, "size": buffer_size,'buffer_host':buffer_host,'dtype':dtype2NpType[data_type]})
 
     def freeMem(self):
-        for item in self.input_data:
+        for item in self.inputs:
             ret = acl.rt.free(item["buffer"])
         ret = acl.mdl.destroy_dataset(self.input_dataset)
-        for item in self.output_data:
+        for item in self.outputs:
             ret = acl.rt.free(item["buffer"])
             if self.mode != 'rc':
                 ret = acl.rt.free_host(item["buffer_host"])

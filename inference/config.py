@@ -23,6 +23,10 @@ class InferenceConfig:
         {"role":"assistant","content":"I agree, we should take turns."},
     ])
     model:str=""
+    vision_model:str=""
+    embedding_model:str=""
+    llm_model:str=""
+
     kvcache_method:str = "sliding-window" # "basic"|"sliding-window"|'streamllm'|'H2O'
     kvcache_fixsize:bool = True # 输入的kv缓存是否固定shape
     head_len:int= 32 # 在KVCache evict时前head len会被保留
@@ -37,6 +41,13 @@ class InferenceConfig:
     hidden_dim:int=2048
     dtype:str="float16"
     model_type:str="llama-2-7b"
+
+    ## visual
+    visual_path:str=""
+    image_size:int=420
+    patch_size:int=14
+    image_grid:int=image_size//patch_size//2
+    image_pad_id = 151655 #"<|image_pad|>"
     
     def __post_init__(self):
         assert(self.kvcache_method in ["basic","sliding-window",'streamllm','H2O'])

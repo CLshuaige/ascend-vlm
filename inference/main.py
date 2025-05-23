@@ -2,13 +2,24 @@ import argparse
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from config import InferenceConfig
-from inference import LlamaInterface
+from inference import LlamaInterface, Qwen2VLInterface
 
-def main(cli:bool,engine:LlamaInterface):
+def main(cli:bool,engine):
+    
+    ### test image
+    imga_path = '/root/Documents/project/qwenvl_infer/demo.jpeg'
+    from PIL import Image
+    # load image
+    image = Image.open(imga_path)
+    flag = 0
     if cli:
         while True:
             line = input()
-            print(engine.predict(line))
+            if flag == 0:
+                print(engine.predict(line, image))
+                flag = 1
+            else:
+                print(engine.predict(line))
     from flask import Flask, request, jsonify
     from flask import render_template  # 引入模板插件
     from flask_cors import CORS
@@ -77,18 +88,54 @@ if __name__ == '__main__':
         help="path to huggingface model dir"
     )
     parser.add_argument(
-        "--model", type=str, default="/root/model/tiny-llama-seq-1-key-256-int8.om", 
+        "--model", type=str, default=None, 
         help="path to onnx or om model"
+    )
+    parser.add_argument(
+        "--vision_model", type=str, default=None,
+        help="path to vision model"
+    )
+    parser.add_argument(
+        "--embedding_model", type=str, default=None,
+        help="path to embedding model"
+    )
+    parser.add_argument(
+        "--llm_model", type=str, default=None,
+        help="path to llm model"
+    )
+    parser.add_argument(
+        "--model_type", type=str, default=None,
+        help="choose the type of model, qwen2vl-2b, llama-2-7b, or..."
+    )
+    parser.add_argument(
+        "--kvcache", type=str, default="basic",
+        help="choose the type of kvcahe, 'basic'|'sliding-window'|'streamllm'|'H2O'"
+    )
+    parser.add_argument(
+        "--visual_path", type=str, default=None,
+        help="path to images for visual inference"
     )
     args = parser.parse_args()
     cfg = InferenceConfig(
         hf_model_dir=args.hf_dir,
         model=args.model,
-        max_cache_size=args.kv_size,
+        vision_model=args.vision_model,
+        embedding_model=args.embedding_model,
+        llm_model=args.llm_model,
         sampling_method=args.sampling,
         sampling_value=args.sampling_value,
-        temperature=args.temperature,
         session_type=args.engine,
+        kvcache_method=args.kvcache,
+        max_cache_size=args.kv_size,
+        model_type=args.model_type,
+        visual_path=args.visual_path,
     )
-    engine = LlamaInterface(cfg)
+
+    if args.model_type == "qwen2vl-2b":
+        engine = Qwen2VLInterface(cfg)
+    elif args.model_type == "llama-2-7b":
+        engine = LlamaInterface(cfg)
+    else:
+        print("Invalid model type")
+        sys.exit(1)
     main(args.cli,engine)

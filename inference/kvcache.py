@@ -18,6 +18,9 @@ class KVCache:
         self.evict_len = cfg.evict_len
         self.recent_len = cfg.recent_len
         self.num_kv_group = cfg.num_kv_group
+
+        # visual
+        self.image_grid = cfg.image_grid
         if cfg.dtype == "float16":
             self.dtype=np.float16
         elif cfg.dtype=="float32":
@@ -35,6 +38,7 @@ class KVCache:
             self.kvCache = [np.zeros((1,self.n_layer,self.max_size,self.head_num,self.head_dim),dtype=self.dtype),np.zeros((1,self.n_layer,self.max_size,self.head_num,self.head_dim),dtype=self.dtype)]
         elif self.format == 'nhead_seq_headdim':
             self.kvCache = [np.zeros((1,self.n_layer,self.head_num,self.max_size,self.head_dim),dtype=self.dtype),np.zeros((1,self.n_layer,self.head_num,self.max_size,self.head_dim),dtype=self.dtype)]
+    
 
     def update(self,seq_len:int,newKV:Tuple[List[np.ndarray],List[np.ndarray]],scores:Optional[np.ndarray]=None)->None:
         pass
@@ -51,6 +55,35 @@ class KVCache:
             cache,mask = self.kvCache[:,:,:,:,:self.kv_size], np.ones((1,self.kv_size+seq_len),dtype=np.int64)
         pos_id =np.arange(self.input_pos,self.input_pos+seq_len,dtype=np.int64).reshape(1,-1)
         return cache,mask,pos_id
+    
+    def getInputsForVLM(self, seq_len: int, image_mask: np.ndarray) -> List[np.ndarray]:
+        cache, mask = None, None
+        if self.fix_size:
+            cache = self.kvCache
+            mask = np.zeros((1, 1, seq_len, self.max_size+seq_len),dtype=self.dtype)
+            mask[:, :, :seq_len, self.kv_size:self.max_size] = 1
+            mask = mask*np.finfo(self.dtype).min
+        # use image_mask to get the start position of the image and the length of the image
+        image_start_pos = np.where(image_mask)[1]
+        if len(image_start_pos) == 0:
+            image_start_pos = -1
+        else:
+            image_start_pos = image_start_pos[0]
+        image_len = np.sum(image_mask)
+        if self.input_pos < image_start_pos:
+            pos_id = np.arange(self.input_pos, self.input_pos+seq_len, dtype=np.int64).reshape(1, -1)
+            pos_id = np.repeat(pos_id[np.newaxis], 3, axis=0)
+        elif self.input_pos >= image_start_pos + image_len:
+            pos_id = np.arange(self.input_pos-image_len, self.input_pos-image_len+seq_len, dtype=np.int64).reshape(1, -1)
+            pos_id = np.repeat(pos_id[np.newaxis], 3, axis=0)
+        else:
+            pos_id = np.arange(image_start_pos, image_start_pos+seq_len, dtype=np.int64).reshape(1, -1)
+            pos_id = np.repeat(pos_id[np.newaxis], 3, axis=0)
+
+            pos_id[1, 0, 0] = (self.input_pos-image_start_pos) // self.image_grid
+            pos_id[2, 0, 0] = (self.input_pos-image_start_pos) % self.image_grid
+
+        return cache, mask, pos_id
     
     def reset(self):
         self.input_pos=0
