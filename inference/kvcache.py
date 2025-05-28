@@ -63,10 +63,11 @@ class KVCache:
             mask = np.zeros((1, 1, seq_len, self.max_size+seq_len),dtype=self.dtype)
             mask[:, :, :seq_len, self.kv_size:self.max_size] = 1
             mask = mask*np.finfo(self.dtype).min
+        #print(f"input_pos: {self.input_pos}, kv_size: {self.kv_size}")
         # use image_mask to get the start position of the image and the length of the image
         image_start_pos = np.where(image_mask)[1]
         if len(image_start_pos) == 0:
-            image_start_pos = -1
+            image_start_pos = 1024
         else:
             image_start_pos = image_start_pos[0]
         image_len = np.sum(image_mask)
@@ -74,7 +75,7 @@ class KVCache:
             pos_id = np.arange(self.input_pos, self.input_pos+seq_len, dtype=np.int64).reshape(1, -1)
             pos_id = np.repeat(pos_id[np.newaxis], 3, axis=0)
         elif self.input_pos >= image_start_pos + image_len:
-            pos_id = np.arange(self.input_pos-image_len, self.input_pos-image_len+seq_len, dtype=np.int64).reshape(1, -1)
+            pos_id = np.arange(self.input_pos-image_len+1, self.input_pos-image_len+seq_len+1, dtype=np.int64).reshape(1, -1)
             pos_id = np.repeat(pos_id[np.newaxis], 3, axis=0)
         else:
             pos_id = np.arange(image_start_pos, image_start_pos+seq_len, dtype=np.int64).reshape(1, -1)
@@ -104,6 +105,11 @@ class KVCache:
             return H2O(config)
         else:
             return None
+
+    def set_input_pos(self,pos):
+        self.input_pos = pos
+    def get_input_pos(self):
+        return self.input_pos
 
 class Basic(KVCache):
     def __init__(self, cfg: InferenceConfig) -> None:

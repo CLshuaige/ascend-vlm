@@ -22,6 +22,7 @@ class InferenceConfig:
         {"role":"user","content":"Great, I insist that we take turns."},
         {"role":"assistant","content":"I agree, we should take turns."},
     ])
+    system_prompt:str = "You are a helpful assistant."
     model:str=""
     vision_model:str=""
     embedding_model:str=""
@@ -29,7 +30,7 @@ class InferenceConfig:
 
     kvcache_method:str = "sliding-window" # "basic"|"sliding-window"|'streamllm'|'H2O'
     kvcache_fixsize:bool = True # 输入的kv缓存是否固定shape
-    head_len:int= 32 # 在KVCache evict时前head len会被保留
+    head_len:int= 100 # 在KVCache evict时前head len会被保留
     recent_len:int = 32 # 在KVCache evict时最近recent len会被保留
     evict_len:int = 64 # KVCache 逐出的最小值，当KVCache达到最大值时将逐出evict_len个KVCache
     n_layer:int = 22
@@ -48,6 +49,15 @@ class InferenceConfig:
     patch_size:int=14
     image_grid:int=image_size//patch_size//2
     image_pad_id = 151655 #"<|image_pad|>"
+
+    pact:bool = False # 是否使用Pact量化
+    pact_config_path:Optional[str] = None
+    n_layer_pact1:int = 4
+    n_layer_pact2:int = 24
+    reduction_ratio_for_cache_size:float = 0.25 # kvcache的最大长度
+
+
+
     
     def __post_init__(self):
         assert(self.kvcache_method in ["basic","sliding-window",'streamllm','H2O'])
@@ -73,3 +83,5 @@ class InferenceConfig:
         if self.kvcache_method == "H2O":
             self.evict_len = int(min((self.max_cache_size - self.head_len -self.recent_len )/2,self.evict_len ))
             assert(self.head_len+self.recent_len+self.evict_len < self.max_cache_size)
+
+        self.pact = self.pact_config_path is not None

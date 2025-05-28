@@ -115,6 +115,10 @@ if __name__ == '__main__':
         "--visual_path", type=str, default=None,
         help="path to images for visual inference"
     )
+    parser.add_argument(
+        "--pact_config_path", type=str, default=None,
+        help="path to pact config file"
+    )
     args = parser.parse_args()
     cfg = InferenceConfig(
         hf_model_dir=args.hf_dir,
@@ -129,9 +133,10 @@ if __name__ == '__main__':
         max_cache_size=args.kv_size,
         model_type=args.model_type,
         visual_path=args.visual_path,
+        pact_config_path=args.pact_config_path
     )
 
-    if args.model_type == "qwen2vl-2b":
+    if args.model_type == "qwen2vl-2b" or args.model_type == "qwen2vl-pact":
         engine = Qwen2VLInterface(cfg)
     elif args.model_type == "llama-2-7b":
         engine = LlamaInterface(cfg)
