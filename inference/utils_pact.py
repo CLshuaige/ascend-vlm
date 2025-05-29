@@ -1360,7 +1360,9 @@ def pact(hidden_states, query_states_before_rope, key_states_before_rope, key_st
     from types import SimpleNamespace
 
     pact_config = SimpleNamespace(**pact_config)
-    print(f"cutoff = {pact_config.cutoff}, pruning_tokeep_percentage_value = {pact_config.pruning_tokeep_percentage_value} \n")
+    import logging
+    import log_config
+    logging.info(f"cutoff = {pact_config.cutoff}, pruning_tokeep_percentage_value = {pact_config.pruning_tokeep_percentage_value}")
     # to tensor
     # input: B, L, N, D
     if not isinstance(image_mask, torch.Tensor):

@@ -5,6 +5,10 @@ import numpy as np
 import os
 import ctypes
 from ctypes import c_void_p, c_int, c_size_t, c_ulong, c_int64,POINTER
+
+import logging
+import log_config
+
 ACL_MEM_MALLOC_HUGE_FIRST = 0
 ACL_MEMCPY_HOST_TO_DEVICE = 1
 ACL_MEMCPY_DEVICE_TO_HOST = 2
@@ -78,7 +82,7 @@ class ACLModel:
         self.in_arrs:List[np.ndarray] = []
         self.out_arrs:List[np.ndarray] = []
         self.loadModel(model_path)
-        print(f"{self.model_name} loaded")
+        logging.info(f"{self.model_name} loaded")
         self.allocateMem()
         if not callback:
             return
@@ -99,7 +103,7 @@ class ACLModel:
             ret = acl.rt.destroy_stream(self.stream)
         self.freeMem()
         self.unloadModel()  
-        print(f"{self.model_name} unloaded")
+        logging.info(f"{self.model_name} unloaded")
 
     def loadModel(self, model_path):
         '''

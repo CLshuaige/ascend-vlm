@@ -1,2 +1,3 @@
 *.pyc
 inference/dist/*
+logs/*

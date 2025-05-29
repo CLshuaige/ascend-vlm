@@ -10,6 +10,9 @@ from utils_pact import pact
 
 from tqdm import tqdm
 
+import logging
+import log_config
+
 class Session:
 	def __init__(self,config:InferenceConfig) -> None:
 		if config.pact:
@@ -278,7 +281,7 @@ class AclQwenVLPACTSession(Session):
 
 			
 			pruned_hidden_states, pruned_position_ids, self.weights, reduction= pact(image_hidden_states, query_states_before_rope, key_states_before_rope, key_states, None, image_mask[:, -seq_len:], real_position_ids, self.pact_config_path)
-			print(f"PACT 保留率: {1.0*reduction[1]/reduction[0]:.2f}%")
+			logging.info(f"PACT 保留率: {1.0*reduction[1]/reduction[0]:.2f}%")
 			seq_len = pruned_hidden_states.shape[1]
 
 		# llm_4_28

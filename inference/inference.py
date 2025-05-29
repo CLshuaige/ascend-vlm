@@ -11,6 +11,13 @@ from qwen_vl_utils import process_vision_info
 import base64
 import re
 from io import BytesIO
+import time
+import logging
+import log_config
+
+from npu_monitor import NPUMonitor
+
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 class LlamaInterface:
     def __init__(self,config:InferenceConfig) -> None:
@@ -185,15 +192,16 @@ class Qwen2VLInterface:
 
         self.lock = Lock()
         self.reset()
+        self.monitor = NPUMonitor(interval=0.5, log_file='./logs/npu_memory.log')
+        self.monitor.start()
 
-        print("init success")
+        logging.info("init success")
 
     def generate_cache(self,prompt:str):
         if len(prompt) == 0 :
             return
         self.chat_history += prompt
         input_ids = np.asarray(self.encode(prompt,add_bos_token=self.first),dtype=np.int64).reshape(1,-1)
-        print(f"input_ids add bos token: {input_ids}")
         image_mask = input_ids == self.image_pad_id
         if self.image_mask == []:
             self.image_mask = image_mask
@@ -245,16 +253,17 @@ class Qwen2VLInterface:
 
     def clear(self):
         import sys
-        print("clear...")
         if isinstance(self.session.llm_model, List):
             for model in self.session.llm_model:
                 model.unload()
         else:
             self.session.llm_model.unload()
         self.session.embedding_model.unload()
-        print(f"history: {self.chat_history}")
-        print("exit!")
+        self.monitor.stop()
+        logging.debug(f"history: {self.chat_history}")
+        logging.info("exit!")
         sys.exit(0)
+
 
     def format_last_output(self):
         if len(self.last_output) == 0:
@@ -263,6 +272,7 @@ class Qwen2VLInterface:
         self.last_output = ""
     
     def predict(self, text, image=None):
+        start_total = time.time()
         with self.lock:
             self.state['isEnd'],self.state['message'] = False,""        
         if text == "":
@@ -290,6 +300,7 @@ class Qwen2VLInterface:
         else:
             self.image_mask = np.concatenate((self.image_mask, image_mask), axis=1)
         self.first,ids_list = False,[]
+        first_token = True
         for i in range(self.max_length):
             logits = self.session.run(input_ids, self.image_mask, pixel_values=pixel_values)[0]
             pixel_values = None
@@ -299,6 +310,10 @@ class Qwen2VLInterface:
                 #self.session.rollback(1) 
                 break
             ids_list.append(input_ids[0].item())
+            if first_token:
+                time_first_token = time.time()
+                logging.info(f"first token time: {time_first_token - start_total}")
+                first_token = False
             text_out = self.tokenizer.decode(ids_list)
             # stop_word = is_stop_word_or_prefix(text_out,self.stop_words)
             # if stop_word != "":
@@ -312,6 +327,8 @@ class Qwen2VLInterface:
         with self.lock:
             self.state['message'],self.state['isEnd'] = self.last_output,True
         self.chat_history += self.last_output
+        end_total = time.time()
+        logging.info(f"total time: {end_total - start_total}, token/second: {len(ids_list)/(end_total - time_first_token)}")
         return self.last_output
 
     def reset(self):
