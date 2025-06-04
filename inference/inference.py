@@ -164,6 +164,10 @@ class LlamaInterface:
 
 class Qwen2VLInterface:
     def __init__(self,config:InferenceConfig) -> None:
+
+        self.monitor = NPUMonitor(interval=0.5, log_file='./logs/npu_memory.log')
+        self.monitor.start()
+
         self.max_length = config.max_length
         from transformers import AutoTokenizer
         self.tokenizer=AutoTokenizer.from_pretrained(config.tokenizer)
@@ -189,11 +193,10 @@ class Qwen2VLInterface:
         self.chat_history = "" # save the history of chat
 
         self.processor = AutoProcessor.from_pretrained(config.hf_model_dir, use_fast=True)
+        self.is_token_by_token = config.is_token_by_token
 
         self.lock = Lock()
         self.reset()
-        self.monitor = NPUMonitor(interval=0.5, log_file='./logs/npu_memory.log')
-        self.monitor.start()
 
         logging.info("init success")
 
@@ -323,12 +326,19 @@ class Qwen2VLInterface:
             if i%3 == 0:
                 with self.lock:
                     self.state['message']=text_out
+            if self.is_token_by_token:
+                print(self.tokenizer.decode(ids_list[-1]),end="",flush=True)
+        if self.is_token_by_token:
+            print('\n',end="",flush=True)
         self.last_output = self.tokenizer.decode(ids_list)
         with self.lock:
             self.state['message'],self.state['isEnd'] = self.last_output,True
         self.chat_history += self.last_output
         end_total = time.time()
         logging.info(f"total time: {end_total - start_total}, token/second: {len(ids_list)/(end_total - time_first_token)}")
+        
+        if self.is_token_by_token:
+            return ''
         return self.last_output
 
     def reset(self):

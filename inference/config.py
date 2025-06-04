@@ -55,6 +55,7 @@ class InferenceConfig:
     n_layer_pact1:int = 4
     n_layer_pact2:int = 24
     reduction_ratio_for_cache_size:float = 0.25 # kvcache的最大长度
+    is_token_by_token:bool = False # 是否逐token输出
 
 
 

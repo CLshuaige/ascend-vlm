@@ -41,4 +41,20 @@ python ./inference/main.py \
     --cli \
     --kv_size ${KVSIZE} \
     --visual_path /root/Documents/project/qwenvl_infer/demo.jpeg \
-    --pact_config_path /root/Documents/project/ascend-vlm/inference/pact_configs.json
+    --pact_config_path /root/Documents/project/ascend-vlm/inference/pact_configs.json \
+    --tokenbytoken True \
+
+# python ./inference/main.py \
+#     --model_type qwen2vl-2b\
+#     --vision_model /root/Documents/model_dir/Ascend_llms/Qwen2VL/fp16_1024_1/visual.om \
+#     --embedding_model /root/Documents/model_dir/Ascend_llms/Qwen2VL/fp16_1024_1/embedder.om \
+#     --llm_model /root/Documents/model_dir/Ascend_llms/Qwen2VL/fp16_1024_1/llm.om \
+#     --hf-dir /root/Documents/model_dir/Qwen2-VL-2B-Instruct \
+#     --engine acl \
+#     --sampling greedy --sampling_value 10 --temperature 0.7 \
+#     --kvcache basic \
+#     --cli \
+#     --kv_size ${KVSIZE} \
+#     --visual_path /root/Documents/project/qwenvl_infer/demo.jpeg \
+#     --tokenbytoken True \
+#     #--pact_config_path /root/Documents/project/ascend-vlm/inference/pact_configs.json

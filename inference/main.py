@@ -119,6 +119,10 @@ if __name__ == '__main__':
         "--pact_config_path", type=str, default=None,
         help="path to pact config file"
     )
+    parser.add_argument(
+        "--tokenbytoken", type=bool, default=False,
+        help="if set to True, the model will generate token by token output"
+    )
     args = parser.parse_args()
     cfg = InferenceConfig(
         hf_model_dir=args.hf_dir,
@@ -133,7 +137,8 @@ if __name__ == '__main__':
         max_cache_size=args.kv_size,
         model_type=args.model_type,
         visual_path=args.visual_path,
-        pact_config_path=args.pact_config_path
+        pact_config_path=args.pact_config_path,
+        is_token_by_token=args.tokenbytoken,
     )
 
     if args.model_type == "qwen2vl-2b" or args.model_type == "qwen2vl-pact":
