@@ -8,20 +8,22 @@ import transformers
 
 
 
-shutil.copy("/home/chenl/project/ascend/ascend-llm/export_llama/modeling_qwen2_vl_m.py", "/home/chenl/miniconda3/envs/ascend-llm/lib/python3.9/site-packages/transformers/models/qwen2_vl/modeling_qwen2_vl.py")
+shutil.copy("/home/chenl/project/ascend/ascend-vlm/export_llama/modeling_qwen2_vl_m.py", "/home/chenl/miniconda3/envs/ascend-llm/lib/python3.9/site-packages/transformers/models/qwen2_vl/modeling_qwen2_vl.py")
 from transformers import Qwen2VLForConditionalGeneration, AutoTokenizer, AutoProcessor
 #from qwen_vl_utils import process_vision_info
 
 # device = cuda 0
 device = "cuda:1"
 opeset_version = 15
-PACT = os.getenv("PACT")
-Layer1_4 = os.getenv("Layer1_4")
-Layer5_28 = os.getenv("Layer5_28")
+def str2bool(s):
+    return s.lower() in ['true', '1', 'True']
+PACT = str2bool(os.getenv("PACT"))
+Layer1_4 = str2bool(os.getenv("Layer1_4"))
+Layer5_28 = str2bool(os.getenv("Layer5_28"))
 
-export_llm = os.getenv("export_llm")
-export_embedder = os.getenv("export_embedder")
-export_visual = os.getenv("export_visual")
+export_llm = str2bool(os.getenv("export_llm"))
+export_embedder = str2bool(os.getenv("export_embedder"))
+export_visual = str2bool(os.getenv("export_visual"))
 
 
 def export_onnx(base_model,out_path,quant_cfg_path,act_path):
@@ -151,7 +153,13 @@ def export_onnx(base_model,out_path,quant_cfg_path,act_path):
 
     if export_visual:
         model = llm_model.visual
-        quantize(model,quantize_cfg)
+        if quant_cfg_path is not "":
+            spec = importlib.util.spec_from_file_location("quant_cfg_module", quant_cfg_path)
+            quant_cfg_module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(quant_cfg_module)
+            quantize_cfg = quant_cfg_module.get(model_cfg,act_path)
+            from quantize import quantize
+            quantize(model,quantize_cfg)
         out_path = out_path.replace("llm.onnx","visual.onnx")
         input_args = (
             pixel_values,

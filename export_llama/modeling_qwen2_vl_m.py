@@ -57,9 +57,11 @@ else:
 
 import os
 # use pact
-PACT = os.getenv("PACT")
-Layer1_4 = os.getenv("Layer1_4")
-Layer5_28 = os.getenv("Layer5_28")
+def str2bool(s):
+    return s.lower() in ['true', '1', 'True']
+PACT = str2bool(os.getenv("PACT"))
+Layer1_4 = str2bool(os.getenv("Layer1_4"))
+Layer5_28 = str2bool(os.getenv("Layer5_28"))
 
 
 logger = logging.get_logger(__name__)
@@ -1821,8 +1823,10 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
         hidden_states = outputs[0]
         new_key_values = outputs[1]
         logits = self.lm_head(hidden_states)
-
+        print(f"error {PACT}")
+        print(Layer1_4)
         if PACT and Layer1_4:
+            print("-----------------------------------")
             query_states_before_rope = outputs[2]
             key_states_before_rope = outputs[3]
             
