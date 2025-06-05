@@ -13,7 +13,7 @@ from transformers import Qwen2VLForConditionalGeneration, AutoTokenizer, AutoPro
 #from qwen_vl_utils import process_vision_info
 
 # device = cuda 0
-device = "cuda:1"
+device = os.getenv("DEVICE")
 opeset_version = 15
 def str2bool(s):
     return s.lower() in ['true', '1', 'True']
@@ -37,14 +37,6 @@ def export_onnx(base_model,out_path,quant_cfg_path,act_path):
     model_cfg=model.model.config
     llm_model = model
 
-    if quant_cfg_path is not "":
-        spec = importlib.util.spec_from_file_location("quant_cfg_module", quant_cfg_path)
-        quant_cfg_module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(quant_cfg_module)
-        quantize_cfg = quant_cfg_module.get(model_cfg,act_path)
-        from quantize import quantize
-        quantize(llm_model,quantize_cfg)
-    
     input_names = ["attention_mask", "position_ids","past_key_values", "input_embeds",
                    ]
     if PACT and Layer5_28:
@@ -117,6 +109,14 @@ def export_onnx(base_model,out_path,quant_cfg_path,act_path):
 
     llm_model.eval()
     if export_llm:
+
+        if quant_cfg_path is not "":
+            spec = importlib.util.spec_from_file_location("quant_cfg_module", quant_cfg_path)
+            quant_cfg_module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(quant_cfg_module)
+            quantize_cfg = quant_cfg_module.get(model_cfg,act_path)
+            from quantize import quantize
+            quantize(llm_model,quantize_cfg)
         torch.onnx.export(
             llm_model,
             f=out_path,
@@ -153,11 +153,12 @@ def export_onnx(base_model,out_path,quant_cfg_path,act_path):
 
     if export_visual:
         model = llm_model.visual
+        visual_cfg = model.config
         if quant_cfg_path is not "":
             spec = importlib.util.spec_from_file_location("quant_cfg_module", quant_cfg_path)
             quant_cfg_module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(quant_cfg_module)
-            quantize_cfg = quant_cfg_module.get(model_cfg,act_path)
+            quantize_cfg = quant_cfg_module.get(visual_cfg,act_path)
             from quantize import quantize
             quantize(model,quantize_cfg)
         out_path = out_path.replace("llm.onnx","visual.onnx")
