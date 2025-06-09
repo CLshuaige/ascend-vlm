@@ -37,23 +37,31 @@ def main(cli:bool,engine):
     @app.route('/')
     def index():
         return render_template('index.html', name='index')
-
+    
     @app.route("/api/chat", methods=["POST"])
     def getChat():
-        msg = request.get_json(force=True)['message']
-        if len(msg) == 0:
-            return jsonify({"code": 404})
-        # if image is in request, use it
+        # ✅ 获取文本信息
+        message = request.form.get('message', '').strip()
+        if not message:
+            return jsonify({"code": 404, "error": "Message is required"})
+
+        # ✅ 获取图片（如果存在）
+        image = None
         if 'image' in request.files:
-            image = request.files['image']
-            image = Image.open(BytesIO(image.read()))
-            pool.submit(engine.predict,msg,image)
-        else:
-            pool.submit(engine.predict,msg,None)
-        return jsonify({"code": 200})
+            file = request.files['image']
+            try:
+                image = Image.open(BytesIO(file.read()))
+            except Exception as e:
+                return jsonify({"code": 400, "error": "Invalid image file", "details": str(e)})
+
+        # 异步执行预测
+        pool.submit(engine.predict, message, image)
+
+        return jsonify({"code": 200, "message": "Received successfully"})
 
     @app.route("/api/getMsg", methods=["GET"])
     def getMsg():
+        print(engine.getState())
         return jsonify(engine.getState())
     
     @app.route("/api/reset", methods=["GET"])
