@@ -27,6 +27,7 @@ class InferenceConfig:
     vision_model:str=""
     embedding_model:str=""
     llm_model:str=""
+    mlp_model:str=""
 
     kvcache_method:str = "sliding-window" # "basic"|"sliding-window"|'streamllm'|'H2O'
     kvcache_fixsize:bool = True # 输入的kv缓存是否固定shape
