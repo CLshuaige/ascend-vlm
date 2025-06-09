@@ -2,7 +2,7 @@ import argparse
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from config import InferenceConfig
-from inference import LlamaInterface, Qwen2VLInterface
+from inference import LlamaInterface, Qwen2VLInterface, InternVLInterface
 
 def main(cli:bool,engine):
     
@@ -104,6 +104,10 @@ if __name__ == '__main__':
         help="path to llm model"
     )
     parser.add_argument(
+        "--mlp_model", type=str, default=None,
+        help="path to mlp model"
+    )
+    parser.add_argument(
         "--model_type", type=str, default=None,
         help="choose the type of model, qwen2vl-2b, llama-2-7b, or..."
     )
@@ -130,6 +134,7 @@ if __name__ == '__main__':
         vision_model=args.vision_model,
         embedding_model=args.embedding_model,
         llm_model=args.llm_model,
+        mlp_model=args.mlp_model,
         sampling_method=args.sampling,
         sampling_value=args.sampling_value,
         session_type=args.engine,
@@ -143,6 +148,8 @@ if __name__ == '__main__':
 
     if args.model_type == "qwen2vl-2b" or args.model_type == "qwen2vl-pact":
         engine = Qwen2VLInterface(cfg)
+    elif args.model_type == "internvl":
+        engine = InternVLInterface(cfg)
     elif args.model_type == "llama-2-7b":
         engine = LlamaInterface(cfg)
     else:

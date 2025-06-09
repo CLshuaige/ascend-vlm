@@ -38,6 +38,8 @@ class Session:
 				return AclQwenVLSession(config)
 			elif config.model_type == 'qwen2vl-pact':
 				return AclQwenVLPACTSession(config)
+			elif config.model_type == 'internvl':
+				return AclInternVLSession(config)
 			else:
 				return AclSession(config)
 		else:
@@ -342,6 +344,21 @@ class AclInternVLSession(Session):
 		# if self.acl_mode == 'rc':
 		# 		_, _, self.kvCache.kvCache, self.input_embeds = self.llm_model.getInputs()
 
+	def pixel_shuffle(x, scale_factor=0.5):
+		# 获取形状
+		n, w, h, c = x.shape  # 使用.shape替代.size() 
+		# 重塑操作使用numpy的reshape
+		x = x.reshape(n, w, int(h * scale_factor), int(c / scale_factor))
+		# 转置操作使用numpy的transpose
+		x = np.transpose(x, (0, 2, 1, 3))
+		# 继续重塑
+		x = x.reshape(n, int(h * scale_factor), int(w * scale_factor),
+					int(c / (scale_factor * scale_factor)))
+		
+		# 如果需要最后的转置
+		x = np.transpose(x, (0, 2, 1, 3))
+		
+		return x
 
 	def run(self, input_ids:np.ndarray,  image_mask, pixel_values=None,):
 		seq_len=input_ids.shape[-1]
@@ -351,10 +368,19 @@ class AclInternVLSession(Session):
 
 			pixel_values = np.expand_dims(pixel_values,axis=0)
 			image_embeds = self.vision_model.inference([pixel_values])[0]
-			image_embeds = image_embeds.reshape(1,image_embeds.shape[0],-1).astype(np.float16)
+
+			image_embeds = image_embeds[:, 1:, :]
+			h = w = int(image_embeds.shape[1] ** 0.5)
+			image_embeds = image_embeds.reshape(image_embeds.shape[0], h, w, -1)
+			image_embeds = self.pixel_shuffle(image_embeds, scale_factor=0.5)
+			image_embeds = image_embeds.reshape(image_embeds.shape[0], -1, image_embeds.shape[-1])	
+
+			image_embeds = self.mlp_model.inference([image_embeds])[0]
+
 			image_start_pos = np.where(image_mask==True)[1][0]
 			image_len = np.sum(image_mask)
 			self.vision_model.unload()
+			self.mlp_model.unload()
 		else:
 			image_start_pos = -1
 			image_len = 0
@@ -365,7 +391,7 @@ class AclInternVLSession(Session):
 		while l < seq_len:
 			r = min(seq_len,r)
 			self.input_ids[:,:r-l] = input_ids[:,l:r]
-			cache,mask,pos_ids = self.kvCache.getInputsForVLM(self.max_len,image_mask)
+			cache,mask,pos_ids = self.kvCache.getInputs(self.max_len)
 			if l < image_start_pos:
 				self.input_embeds[:,:r-l,:] = self.embedding_model.inference([self.input_ids])[0]
 			elif l >= image_start_pos + image_len:
