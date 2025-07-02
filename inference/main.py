@@ -7,7 +7,7 @@ from inference import LlamaInterface, Qwen2VLInterface, InternVLInterface
 def main(cli:bool,engine):
     
     ### test image
-    imga_path = '/root/Documents/project/qwenvl_infer/demo.jpeg'
+    imga_path = '/root/Documents/project/qwenvl_infer/image1.jpg'
     from PIL import Image
     # load image
     image = Image.open(imga_path)

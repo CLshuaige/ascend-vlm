@@ -344,7 +344,7 @@ class AclInternVLSession(Session):
 		# if self.acl_mode == 'rc':
 		# 		_, _, self.kvCache.kvCache, self.input_embeds = self.llm_model.getInputs()
 
-	def pixel_shuffle(x, scale_factor=0.5):
+	def pixel_shuffle(self,x, scale_factor=0.5):
 		# 获取形状
 		n, w, h, c = x.shape  # 使用.shape替代.size() 
 		# 重塑操作使用numpy的reshape
@@ -354,10 +354,7 @@ class AclInternVLSession(Session):
 		# 继续重塑
 		x = x.reshape(n, int(h * scale_factor), int(w * scale_factor),
 					int(c / (scale_factor * scale_factor)))
-		
-		# 如果需要最后的转置
 		x = np.transpose(x, (0, 2, 1, 3))
-		
 		return x
 
 	def run(self, input_ids:np.ndarray,  image_mask, pixel_values=None,):
@@ -365,7 +362,7 @@ class AclInternVLSession(Session):
 		l,r,result = 0,self.max_len,None
 		
 		if pixel_values is not None:
-			# print(f"pixel_values: {pixel_values.shape}")
+
 			image_embeds = self.vision_model.inference([pixel_values])[0]
 
 			image_embeds = image_embeds[:, 1:, :]
@@ -376,6 +373,7 @@ class AclInternVLSession(Session):
 
 			image_embeds = self.mlp_model.inference([image_embeds])[0]
 
+			image_embeds = image_embeds.copy()
 			image_start_pos = np.where(image_mask==True)[1][0]
 			image_len = np.sum(image_mask)
 			self.vision_model.unload()
@@ -396,6 +394,10 @@ class AclInternVLSession(Session):
 			elif l >= image_start_pos + image_len:
 				self.input_embeds[:,:r-l,:] = self.embedding_model.inference([self.input_ids])[0]
 			else:
+				print(l,r,image_start_pos,image_len)
+				print(image_embeds.shape)
+				print(l-image_start_pos,r-image_start_pos)
+				print(image_embeds[:,0,:])
 				self.input_embeds[:,:r-l,:] = image_embeds[:,l-image_start_pos:r-image_start_pos,:]
 				
 			result:List[np.ndarray] = self.llm_model.inference([mask,pos_ids,cache,self.input_embeds])
@@ -407,3 +409,4 @@ class AclInternVLSession(Session):
 		if pbar is not None:
 			pbar.close()
 		return result
+
